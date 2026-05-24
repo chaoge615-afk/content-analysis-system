@@ -46,7 +46,7 @@ text-to-sql/
 ├── tests/
 │   └── test_pipeline.py     # 单元测试
 ├── data/
-│   └── nutrition.db          # DuckDB 数据库
+│   └── nutrition.db          # DuckDB 数据库（已改名为 content.db）
 ├── .env                     # API 配置
 ├── requirements.txt
 ├── Dockerfile
@@ -69,7 +69,7 @@ pip install -r requirements.txt
 MINIMAX_API_KEY=your_api_key_here
 MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
 MODEL_NAME=MiniMax-M2.7
-DATABASE_PATH=./data/nutrition.db
+DATABASE_PATH=./data/content.db
 ```
 
 ### 3. 初始化数据库
@@ -105,7 +105,7 @@ python -m src.main --interactive
 **方式三：单次查询**
 
 ```bash
-python -m src.main "今天我吃了多少蛋白质？"
+python -m src.main "桃姐这个月发了几个视频？"
 ```
 
 ## Agent 工作流程
@@ -142,37 +142,41 @@ python -m src.main "今天我吃了多少蛋白质？"
 
 ## 数据库 Schema
 
-### food 表（食物营养成分）
+### video_meta 表（视频元数据）
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| bvid | TEXT | 主键，B站视频ID（如 BV1xxx） |
+| up_name | TEXT | UP主名称 |
+| up_uid | TEXT | UP主UID |
+| title | TEXT | 视频标题 |
+| publish_date | DATE | 发布日期 |
+| category | TEXT | 分类（如 01_喜欢、生活、知识等） |
+| duration | INT | 视频时长（秒） |
+| summary | TEXT | 精炼摘要（三段式：核心观点+案例摘要+可行动建议） |
+| tags | TEXT | 标签 |
+| created_at | TIMESTAMP | 入库时间 |
+
+### up_info 表（UP主信息）
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| uid | TEXT | 主键，UP主UID |
+| name | TEXT | UP主名称 |
+| total_videos | INT | 视频总数 |
+| last_update | DATE | 最后更新时间 |
+| config_file | TEXT | 配置文件路径 |
+| created_at | TIMESTAMP | 入库时间 |
+
+### query_log 表（查询日志）
 
 | 字段 | 类型 | 含义 |
 |------|------|------|
 | id | INTEGER | 主键 |
-| name | VARCHAR | 食物名称 |
-| calorie | DECIMAL | 每100g热量(kcal) |
-| protein | DECIMAL | 每100g蛋白质(g) |
-| fat | DECIMAL | 每100g脂肪(g) |
-| carb | DECIMAL | 每100g碳水(g) |
-
-### daily_record 表（每日摄入记录）
-
-| 字段 | 类型 | 含义 |
-|------|------|------|
-| id | INTEGER | 主键 |
-| date | DATE | 日期 |
-| total_calorie | DECIMAL | 当日总热量 |
-| total_protein | DECIMAL | 当日总蛋白质 |
-| target_calorie | DECIMAL | 目标热量 |
-| target_protein | DECIMAL | 目标蛋白质 |
-
-### meal_record 表（餐次记录）
-
-| 字段 | 类型 | 含义 |
-|------|------|------|
-| id | INTEGER | 主键 |
-| daily_id | INTEGER | 关联 daily_record |
-| meal_type | VARCHAR | 早餐/午餐/晚餐/加餐 |
-| food_id | INTEGER | 关联 food |
-| weight_g | INTEGER | 重量(克) |
+| question | TEXT | 用户问题 |
+| route_type | TEXT | 路由类型（structured/semantic/hybrid） |
+| response_time | DECIMAL | 响应时间（秒） |
+| created_at | TIMESTAMP | 查询时间 |
 
 ## API 接口
 
@@ -186,7 +190,7 @@ python -m src.main "今天我吃了多少蛋白质？"
 ```bash
 curl -X POST http://localhost:8010/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "今天我吃了多少蛋白质？"}'
+  -d '{"question": "桃姐这个月发了几个视频？"}'
 ```
 
 ## 测试
@@ -250,5 +254,5 @@ MAX_RETRIES=3
 | MINIMAX_API_KEY | MiniMax API Key | (必填) |
 | MINIMAX_BASE_URL | API 端点 | https://api.minimaxi.com/anthropic |
 | MODEL_NAME | 模型名称 | MiniMax-M2.7 |
-| DATABASE_PATH | 数据库路径 | ./data/nutrition.db |
+| DATABASE_PATH | 数据库路径 | ./data/content.db |
 | MAX_RETRIES | SQL 重试次数 | 3 |

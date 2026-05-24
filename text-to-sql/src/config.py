@@ -11,7 +11,7 @@ _env_file = PROJECT_ROOT / ".env"
 load_dotenv(_env_file)
 
 # Database Configuration
-# 共享 bilibili-monitor 的 content.db（包含营养数据 + 视频数据）
+# 共享 bilibili-monitor 的 content.db（包含视频数据）
 _default_db = PROJECT_ROOT.parent / "bilibili-monitor" / "data" / "content.db"
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(_default_db))
 

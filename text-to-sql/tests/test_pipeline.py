@@ -9,29 +9,30 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Mock LLM 响应
 INTENT_MOCK_RESPONSE = {
-    "query_target": "protein",
-    "time_range": {
-        "type": "today",
-        "start_date": None,
-        "end_date": None
+    "query_type": "video",
+    "query_target": "video_count",
+    "filters": {
+        "up_name": "桃姐",
+        "date_range": {
+            "type": "this_month"
+        }
     },
-    "aggregation": "sum",
-    "compare_with_target": True,
-    "filters": {}
+    "aggregation": "count",
+    "limit": 10
 }
 
 SCHEMA_MOCK_RESPONSE = {
-    "tables": ["daily_record"],
+    "tables": ["video_meta"],
     "fields": {
-        "daily_record": ["date", "total_protein", "target_protein"]
+        "video_meta": ["bvid", "title", "up_name", "publish_date", "duration"]
     },
     "joins": [],
-    "reasoning": "查询今日蛋白质摄入和目标，直接从 daily_record 表获取"
+    "reasoning": "查询桃姐本月的视频数量，从 video_meta 表获取"
 }
 
 SQL_MOCK_RESPONSE = {
-    "sql": "SELECT date, total_protein, target_protein FROM daily_record WHERE date = CURRENT_DATE",
-    "reasoning": "从 daily_record 表查询今日的蛋白质摄入和目标值"
+    "sql": "SELECT COUNT(*) as video_count FROM video_meta WHERE up_name = '桃姐' AND publish_date >= DATE '2026-05-01'",
+    "reasoning": "从 video_meta 表查询桃姐本月的视频数量"
 }
 
 REVIEW_MOCK_RESPONSE = {
@@ -67,11 +68,11 @@ def test_intent_agent():
         agent = IntentAgent.__new__(IntentAgent)
         agent.llm = MockLLMClient(INTENT_MOCK_RESPONSE)
 
-        result = agent.run("今天我吃了多少蛋白质？")
+        result = agent.run("桃姐这个月发了几个视频？")
 
         assert "error" not in result, f"Intent agent returned error: {result.get('error')}"
-        assert result["query_target"] == "protein", f"Expected protein, got {result.get('query_target')}"
-        assert result["time_range"]["type"] == "today", f"Expected today, got {result.get('time_range')}"
+        assert result["query_target"] == "video_count", f"Expected video_count, got {result.get('query_target')}"
+        assert result["filters"]["up_name"] == "桃姐", f"Expected 桃姐, got {result.get('filters', {}).get('up_name')}"
 
         print(f"[PASS] Intent Agent test passed: {result}")
         return result
@@ -90,7 +91,7 @@ def test_schema_agent():
     result = agent.run(intent)
 
     assert "error" not in result, f"Schema agent returned error: {result.get('error')}"
-    assert "daily_record" in result["tables"], f"Expected daily_record in tables, got {result.get('tables')}"
+    assert "video_meta" in result["tables"], f"Expected video_meta in tables, got {result.get('tables')}"
 
     print(f"[PASS] Schema Agent test passed")
     return result
@@ -146,16 +147,16 @@ def test_database_execution():
     from src.database.duckdb_utils import execute_sql
 
     # Test simple query
-    result = execute_sql("SELECT COUNT(*) FROM food")
-    assert result[0][0] > 0, "Food table should have data"
+    result = execute_sql("SELECT COUNT(*) FROM video_meta")
+    assert result[0][0] > 0, "Video_meta table should have data"
 
-    # Test date query
-    result = execute_sql("SELECT date, total_protein FROM daily_record WHERE date = CURRENT_DATE LIMIT 1")
-    assert len(result) > 0, "Should have today's record"
+    # Test aggregation query
+    result = execute_sql("SELECT up_name, COUNT(*) as cnt FROM video_meta GROUP BY up_name LIMIT 1")
+    assert len(result) > 0, "Should have at least one UP主"
 
     print(f"[PASS] Database execution test passed")
-    print(f"  Food table: {execute_sql('SELECT COUNT(*) FROM food')[0][0]} rows")
-    print(f"  Daily record table: {execute_sql('SELECT COUNT(*) FROM daily_record')[0][0]} rows")
+    print(f"  Video_meta table: {execute_sql('SELECT COUNT(*) FROM video_meta')[0][0]} rows")
+    print(f"  UP主数量: {execute_sql('SELECT COUNT(DISTINCT up_name) FROM video_meta')[0][0]}")
 
 
 def test_pipeline_integration():
@@ -178,7 +179,7 @@ def test_pipeline_integration():
     pipeline.review_agent.llm = MockLLMClient(REVIEW_MOCK_RESPONSE)
 
     # Run Pipeline
-    result = pipeline.run("今天我吃了多少蛋白质？")
+    result = pipeline.run("桃姐这个月发了几个视频？")
 
     # Verify result
     assert result["success"] == True, f"Pipeline failed: {result.get('error')}"

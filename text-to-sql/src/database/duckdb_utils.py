@@ -30,7 +30,7 @@ def execute_sql(sql: str, params: dict = None) -> list:
 
 
 def init_database():
-    """Initialize the database with schema and test data."""
+    """Initialize the database with schema."""
     conn = get_connection()
     schema_path = PROJECT_ROOT / "src" / "database" / "schema.sql"
 
@@ -40,65 +40,12 @@ def init_database():
             schema_sql = f.read()
         conn.execute(schema_sql)
 
-        # Check if data already exists
-        result = conn.execute("SELECT COUNT(*) FROM food").fetchone()
+        # Check if video_meta table exists and has data
+        result = conn.execute("SELECT COUNT(*) FROM video_meta").fetchone()
         if result[0] > 0:
-            print("Database already initialized.")
-            return
-
-        # Insert test food data
-        foods = [
-            (1, "鸡蛋", 144.0, 13.3, 8.8, 1.1),
-            (2, "鸡胸肉", 133.0, 31.0, 1.2, 0.0),
-            (3, "米饭", 116.0, 2.6, 0.3, 25.9),
-            (4, "面条", 284.0, 8.2, 0.6, 59.5),
-            (5, "苹果", 52.0, 0.3, 0.2, 13.8),
-            (6, "香蕉", 89.0, 1.1, 0.2, 22.8),
-            (7, "牛奶", 54.0, 3.2, 3.3, 3.4),
-            (8, "酸奶", 72.0, 2.9, 1.9, 10.3),
-            (9, "牛肉", 250.0, 26.1, 15.0, 0.0),
-            (10, "白菜", 17.0, 1.4, 0.1, 3.4),
-        ]
-        conn.executemany(
-            "INSERT INTO food (id, name, calorie, protein, fat, carb) VALUES (?, ?, ?, ?, ?, ?)",
-            foods
-        )
-
-        # Insert test daily records (last 7 days)
-        from datetime import date, timedelta
-        today = date.today()
-        daily_records = []
-        for i in range(7):
-            d = today - timedelta(days=i)
-            daily_records.append((
-                i + 1,            # id
-                d.isoformat(),
-                1800.0 + i * 50,  # total_calorie
-                65.0 + i * 2,    # total_protein
-                2000.0,           # target_calorie
-                70.0              # target_protein
-            ))
-        conn.executemany(
-            "INSERT INTO daily_record (id, date, total_calorie, total_protein, target_calorie, target_protein) VALUES (?, ?, ?, ?, ?, ?)",
-            daily_records
-        )
-
-        # Insert meal records
-        meal_records = [
-            (1, 1, "早餐", 1, 100),   # id, daily_id, meal_type, food_id, weight_g
-            (2, 1, "午餐", 3, 200),   # day 1, rice
-            (3, 1, "晚餐", 2, 150),   # day 1, chicken
-            (4, 2, "早餐", 7, 200),   # day 2, milk
-            (5, 2, "午餐", 9, 100),   # day 2, beef
-            (6, 3, "早餐", 6, 150),   # day 3, banana
-            (7, 3, "午餐", 4, 100),   # day 3, noodles
-        ]
-        conn.executemany(
-            "INSERT INTO meal_record (id, daily_id, meal_type, food_id, weight_g) VALUES (?, ?, ?, ?, ?)",
-            meal_records
-        )
-
-        print("Database initialized successfully.")
+            print(f"Database already initialized with {result[0]} videos.")
+        else:
+            print("Database schema created. Video data will be added by bilibili-monitor.")
 
     finally:
         conn.close()

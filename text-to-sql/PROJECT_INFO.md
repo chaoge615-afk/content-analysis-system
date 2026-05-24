@@ -54,10 +54,10 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                      数据层                                  │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │              DuckDB (nutrition.db)                  │   │
-│  │  - food 表         食物营养成分                      │   │
-│  │  - daily_record 表 每日摄入记录                     │   │
-│  │  - meal_record 表  餐次记录                         │   │
+│  │              DuckDB (content.db)                    │   │
+│  │  - video_meta 表    视频元数据                       │   │
+│  │  - up_info 表       UP主信息                        │   │
+│  │  - query_log 表     查询日志                        │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -68,11 +68,11 @@
 **文件**: `src/agents/intent_agent.py`
 
 解析用户问题，提取：
-- 查询目标 (calorie/protein/fat/carb)
-- 时间范围 (today/this_week/this_month)
-- 聚合方式 (sum/avg/max/min)
-- 是否需要目标对比
-- 其他筛选条件
+- 查询类型 (video)
+- 查询目标 (video_count/video_list/up_info/category_stats/video_summary)
+- 时间范围 (recent/this_week/this_month)
+- 聚合方式 (count/avg)
+- 筛选条件 (up_name, category, date_range)
 
 ### Agent 2: Schema 检索
 **文件**: `src/agents/schema_agent.py`
@@ -132,7 +132,7 @@ text-to-sql/
 ├── tests/
 │   └── test_pipeline.py         # 流程测试
 ├── data/
-│   └── nutrition.db             # DuckDB 数据库
+│   └── content.db               # DuckDB 数据库
 ├── .env                         # 环境配置
 ├── requirements.txt             # Python 依赖
 └── README.md                    # 项目说明
@@ -145,7 +145,7 @@ text-to-sql/
 MINIMAX_API_KEY=<your_api_key>
 MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
 MODEL_NAME=MiniMax-M2.7
-DATABASE_PATH=./data/nutrition.db
+DATABASE_PATH=./data/content.db
 MAX_RETRIES=3
 ```
 
@@ -168,7 +168,7 @@ cd frontend && npm run dev
 ### CLI 模式
 ```bash
 python -m src.main --interactive
-python -m src.main "今天吃了多少蛋白质？"
+python -m src.main "桃姐这个月发了几个视频？"
 ```
 
 ### Docker
@@ -272,7 +272,7 @@ server: {
 MINIMAX_API_KEY=<your_key>
 MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
 MODEL_NAME=MiniMax-M2.7
-DATABASE_PATH=./data/nutrition.db
+DATABASE_PATH=./data/content.db
 MAX_RETRIES=3
 ```
 
@@ -296,5 +296,5 @@ curl http://localhost:8010/
 # 测试查询
 curl -X POST http://localhost:8010/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "今天我吃了多少蛋白质？"}'
+  -d '{"question": "桃姐这个月发了几个视频？"}'
 ```
