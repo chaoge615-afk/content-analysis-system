@@ -1,117 +1,326 @@
-import { useState } from 'react';
-import QueryInput from './components/QueryInput';
-import ResultTable from './components/ResultTable';
-import { query, QueryResult } from './services/api';
+import { useState, useRef, useEffect } from 'react';
+import ChatInput from './components/ChatInput';
+import ChatMessage from './components/ChatMessage';
+import StatusPanel from './components/StatusPanel';
+import { chat, getUpList, getRecent, getCategories, getStatus } from './services/api';
+
+// 消息类型
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  routeType?: string;
+  sql?: string;
+  sqlResult?: any[];
+  reasoning?: string;
+  responseTime?: number;
+  timestamp: Date;
+}
 
 function App() {
-  const [result, setResult] = useState<QueryResult | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSubmit = async (question: string) => {
+  // 滚动到最新消息
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // 处理发送消息
+  const handleSend = async (input: string) => {
+    // 添加用户消息
+    const userMsg: Message = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: input,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
-    setResult(null);
 
     try {
-      const response = await query(question);
-      setResult(response);
-    } catch (error) {
-      setResult({
-        success: false,
-        error: '网络错误',
-      });
+      // 处理斜杠命令
+      if (input.startsWith('/')) {
+        const response = await handleSlashCommand(input);
+        setMessages((prev) => [...prev, response]);
+      } else {
+        // 普通问答
+        const result = await chat(input);
+        const assistantMsg: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: result.answer,
+          routeType: result.route_type,
+          sql: result.sql,
+          sqlResult: result.sql_result,
+          reasoning: result.reasoning,
+          responseTime: result.response_time,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
+    } catch (error: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `请求失败: ${error.message || '未知错误'}`,
+          routeType: 'error',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
+  // 处理斜杠命令
+  const handleSlashCommand = async (input: string): Promise<Message> => {
+    const parts = input.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+
+    switch (cmd) {
+      case '/status': {
+        const status = await getStatus();
+        const text = status
+          ? `系统状态:\n- Router: ${status.router}\n- Text-to-SQL: ${status.text_to_sql}\n- RAG: ${status.rag}`
+          : '无法获取系统状态';
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/up_list': {
+        const data = await getUpList();
+        const text =
+          data.length > 0
+            ? `UP主列表 (${data.length}):\n` +
+              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
+            : '暂无 UP 主数据';
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          sqlResult: data,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/recent': {
+        const data = await getRecent();
+        const text =
+          data.length > 0
+            ? `最近视频 (${data.length}):\n` +
+              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
+            : '暂无视频数据';
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          sqlResult: data,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/categories': {
+        const data = await getCategories();
+        const text =
+          data.length > 0
+            ? `分类统计 (${data.length}):\n` +
+              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
+            : '暂无分类数据';
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          sqlResult: data,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/sql': {
+        const question = parts.slice(1).join(' ');
+        if (!question) {
+          return {
+            id: `cmd-${Date.now()}`,
+            role: 'assistant',
+            content: '用法: /sql [问题]\n示例: /sql 桃姐有几个视频？',
+            timestamp: new Date(),
+          };
+        }
+        const result = await chat(question, 'structured');
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: result.answer,
+          routeType: result.route_type,
+          sql: result.sql,
+          sqlResult: result.sql_result,
+          reasoning: '强制走 Text-to-SQL',
+          responseTime: result.response_time,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/rag': {
+        const question = parts.slice(1).join(' ');
+        if (!question) {
+          return {
+            id: `cmd-${Date.now()}`,
+            role: 'assistant',
+            content: '用法: /rag [问题]\n示例: /rag 博主们对冷暴力怎么看？',
+            timestamp: new Date(),
+          };
+        }
+        const result = await chat(question, 'semantic');
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: result.answer,
+          routeType: result.route_type,
+          reasoning: '强制走 RAG',
+          responseTime: result.response_time,
+          timestamp: new Date(),
+        };
+      }
+
+      case '/clear': {
+        setMessages([]);
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: '对话已清空',
+          timestamp: new Date(),
+        };
+      }
+
+      case '/help': {
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content:
+            '可用命令:\n' +
+            '  /status      - 查看系统状态\n' +
+            '  /up_list     - 查看 UP 主列表\n' +
+            '  /recent      - 查看最近采集视频\n' +
+            '  /categories  - 查看分类统计\n' +
+            '  /sql [问题]  - 强制走 Text-to-SQL\n' +
+            '  /rag [问题]  - 强制走 RAG\n' +
+            '  /clear       - 清空对话\n' +
+            '  /help        - 显示帮助\n\n' +
+            '直接输入问题即可智能问答，系统会自动判断走 SQL 还是 RAG。',
+          timestamp: new Date(),
+        };
+      }
+
+      default: {
+        return {
+          id: `cmd-${Date.now()}`,
+          role: 'assistant',
+          content: `未知命令: ${cmd}\n输入 /help 查看可用命令`,
+          timestamp: new Date(),
+        };
+      }
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Text-to-SQL 查询系统
+      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold text-gray-800">
+            智能内容分析系统
           </h1>
+          <span className="text-xs text-gray-400">
+            B站视频 · 精炼 · 智能问答
+          </span>
         </div>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="px-3 py-1.5 rounded-lg text-xs text-gray-500 border border-gray-200
+                     hover:bg-gray-50 transition-colors"
+        >
+          {sidebarOpen ? '隐藏面板' : '显示面板'}
+        </button>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-        {/* Query Input Section */}
-        <section className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">
-            输入问题
-          </h2>
-          <QueryInput onSubmit={handleSubmit} loading={loading} />
-        </section>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center space-y-4">
+                  <div className="text-4xl">💬</div>
+                  <h2 className="text-xl font-semibold text-gray-600">
+                    智能内容问答
+                  </h2>
+                  <p className="text-sm text-gray-400 max-w-md">
+                    输入问题，系统会自动判断走结构化查询（SQL）还是语义检索（RAG）。
+                    也可以试试右侧的示例问题。
+                  </p>
+                  <p className="text-xs text-gray-300">
+                    输入 /help 查看所有命令
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-3xl mx-auto">
+                {messages.map((msg) => (
+                  <ChatMessage
+                    key={msg.id}
+                    role={msg.role}
+                    content={msg.content}
+                    routeType={msg.routeType}
+                    sql={msg.sql}
+                    sqlResult={msg.sqlResult}
+                    reasoning={msg.reasoning}
+                    responseTime={msg.responseTime}
+                  />
+                ))}
+                {loading && (
+                  <div className="flex justify-start mb-4">
+                    <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-2 text-gray-400 text-sm">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span>思考中...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+            )}
+          </div>
 
-        {/* Result Section */}
-        {result && (
-          <section className="bg-white rounded-lg shadow p-6 space-y-6">
-            {/* Status */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700 mb-2">
-                结果
-              </h2>
-              {result.success ? (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                  成功
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                  失败
-                </span>
-              )}
+          {/* Input Area */}
+          <div className="border-t border-gray-200 bg-white px-4 py-3 shrink-0">
+            <div className="max-w-3xl mx-auto">
+              <ChatInput onSend={handleSend} loading={loading} />
             </div>
+          </div>
+        </div>
 
-            {/* SQL */}
-            {result.sql && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-2">
-                  生成的 SQL
-                </h3>
-                <pre className="bg-gray-50 p-4 rounded-lg overflow-x-auto text-sm font-mono text-gray-800">
-                  {result.sql}
-                </pre>
-              </div>
-            )}
-
-            {/* Answer */}
-            {result.answer && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-2">
-                  回答
-                </h3>
-                <p className="text-gray-800">{result.answer}</p>
-              </div>
-            )}
-
-            {/* Table */}
-            {result.result && result.result.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-2">
-                  数据表格
-                </h3>
-                <ResultTable data={result.result} />
-              </div>
-            )}
-
-            {/* Error */}
-            {result.error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800">{result.error}</p>
-              </div>
-            )}
-
-            {/* Iterations */}
-            {result.iterations && (
-              <p className="text-sm text-gray-500">
-                迭代次数: {result.iterations}
-              </p>
-            )}
-          </section>
+        {/* Sidebar */}
+        {sidebarOpen && (
+          <div className="w-64 border-l border-gray-200 bg-gray-50 p-3 overflow-y-auto shrink-0">
+            <StatusPanel onQuickQuestion={handleSend} />
+          </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
