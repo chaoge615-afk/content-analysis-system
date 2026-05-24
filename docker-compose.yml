@@ -1,7 +1,7 @@
 # 智能内容分析系统 - 统一 Docker Compose 编排
 # 使用 profiles 区分环境：
 #   - dev: 开发环境（本地调试，暴露端口）
-#   - nas: 生产环境（NAS 部署，资源限制）
+#   - nas: 生产环境（NAS 部署，资源限制，含定时调度）
 #
 # 启动方式：
 #   开发环境: docker compose --profile dev up -d
@@ -9,6 +9,9 @@
 #
 # bilibili-monitor 按需启动（非常驻服务）：
 #   docker compose run --rm bilibili-monitor
+#
+# bilibili-cron（定时调度，仅 nas profile）：
+#   每 6 小时自动运行 bilibili-monitor，无需手动干预
 
 services:
   # ============ 基础设施服务 ============
@@ -73,7 +76,10 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID}
       - BASE_URL=${BASE_URL:-https://api.minimaxi.com/anthropic}
-      - LLM_MODEL=${LLM_MODEL:-MiniMax-M2.7}
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - LLM_MODEL=${RAG_LLM_MODEL:-deepseek-v4-pro}
+      - REFINE_API_KEY=${REFINE_API_KEY}
+      - REFINE_API_URL=${REFINE_API_URL}
       - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
       - SILICONFLOW_BASE_URL=${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
@@ -186,6 +192,30 @@ services:
     mem_limit: 4g
     command: python scripts/monitor_all.py
 
+  # bilibili-monitor 定时调度（每 6 小时自动运行）
+  # 使用 docker:cli 镜像 + crond，挂载 Docker socket 调度 bilibili-monitor
+  # 仅 NAS 生产环境启用（profile: nas）
+  bilibili-cron:
+    image: docker:cli
+    container_name: bilibili-cron
+    profiles: [nas]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project:ro
+      - ./bilibili-monitor/cron_entry.sh:/usr/local/bin/cron_entry.sh:ro
+      - bilibili-cron-logs:/var/log
+    entrypoint: /bin/sh
+    command: >
+      -c "
+        apk add --no-cache bash > /dev/null 2>&1;
+        chmod +x /usr/local/bin/cron_entry.sh;
+        echo '17 */6 * * * /usr/local/bin/cron_entry.sh' > /etc/crontabs/root;
+        echo '[bilibili-cron] 定时任务已启动（每6小时运行，:17 触发）';
+        crond -f -l 2
+      "
+    restart: unless-stopped
+    mem_limit: 128m
+
 volumes:
   # DuckDB 数据库（bilibili-monitor 写，text-to-sql 读，router-agent 读）
   duckdb-data:
@@ -197,4 +227,8 @@ volumes:
 
   # B站原始数据（音频、转写文本、checkpoint）
   bilibili-data:
+    driver: local
+
+  # bilibili-cron 定时任务日志
+  bilibili-cron-logs:
     driver: local
