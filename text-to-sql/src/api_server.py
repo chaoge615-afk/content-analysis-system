@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.orchestrator.pipeline import TextToSQLPipeline
+from src.database.duckdb_utils import get_all_schemas
 
 app = FastAPI(title="Text-to-SQL API", version="1.0.0")
 
@@ -70,6 +71,28 @@ async def query(request: QueryRequest):
 async def root():
     """Health check."""
     return {"status": "ok", "service": "Text-to-SQL API"}
+
+
+@app.get("/api/tables")
+async def get_tables():
+    """获取所有可用表及字段信息（供 Router Agent 使用）"""
+    try:
+        schemas = get_all_schemas()
+        return {
+            "success": True,
+            "tables": schemas,
+            "count": len(schemas)
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": False,
+                "error": f"获取表信息失败: {str(e)}",
+                "tables": [],
+                "count": 0
+            }
+        )
 
 
 if __name__ == "__main__":

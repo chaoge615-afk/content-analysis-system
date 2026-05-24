@@ -119,6 +119,31 @@ def get_table_info(table_name: str) -> dict:
 
 
 def get_all_schemas() -> list:
-    """Get schema information for all tables."""
-    tables = ["food", "daily_record", "meal_record"]
-    return [get_table_info(t) for t in tables]
+    """Get schema information for all tables in the database."""
+    conn = get_connection()
+    try:
+        # 动态查询所有表名
+        tables_result = conn.execute("""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'main'
+            ORDER BY table_name
+        """).fetchall()
+
+        tables = [row[0] for row in tables_result]
+
+        # 获取每个表的 schema
+        schemas = []
+        for table in tables:
+            try:
+                columns = conn.execute(f"DESCRIBE {table}").fetchall()
+                schemas.append({
+                    "table": table,
+                    "columns": [{"name": col[0], "type": col[1], "comment": col[2]} for col in columns]
+                })
+            except Exception as e:
+                print(f"Warning: Failed to get schema for table {table}: {e}")
+
+        return schemas
+    finally:
+        conn.close()

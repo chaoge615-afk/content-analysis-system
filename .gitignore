@@ -44,10 +44,15 @@ search_index.json
 # ChromaDB local data
 chroma_db/
 chromadb-data/
+*/chromadb/
 
 # DuckDB local data
 *.db
 *.db.wal
+
+# bilibili-monitor runtime data
+bilibili-monitor/scripts/data/
+bilibili-monitor/data/
 
 # Logs
 logs/
