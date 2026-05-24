@@ -16,19 +16,31 @@ class SQLGenAgent:
     def __init__(self):
         self.llm = MiniMaxLLM(temperature=0.1)
 
-    def generate(self, intent: dict, schema: dict) -> dict:
-        """Generate SQL based on intent and schema."""
+    def generate(self, intent: dict, schema: dict, retry_hint: str = None) -> dict:
+        """Generate SQL based on intent and schema.
+
+        Args:
+            intent: 结构化查询意图
+            schema: Schema 信息
+            retry_hint: 上次失败的错误信息，用于重试时纠正
+        """
         if "error" in intent:
             return {"error": f"Cannot generate SQL due to intent error: {intent['error']}"}
         if "error" in schema:
             return {"error": f"Cannot generate SQL due to schema error: {schema['error']}"}
 
+        user_content = SQL_GEN_USER_PROMPT.format(
+            intent=json.dumps(intent, ensure_ascii=False),
+            schema=json.dumps(schema, ensure_ascii=False)
+        )
+
+        # 重试时附加错误提示，让 LLM 纠正上次的问题
+        if retry_hint:
+            user_content += f"\n\n## 上次生成的 SQL 有误，请修正\n{retry_hint}"
+
         messages = [
             SystemMessage(content=SQL_GEN_SYSTEM_PROMPT),
-            HumanMessage(content=SQL_GEN_USER_PROMPT.format(
-                intent=json.dumps(intent, ensure_ascii=False),
-                schema=json.dumps(schema, ensure_ascii=False)
-            )),
+            HumanMessage(content=user_content),
         ]
 
         content = self.llm.invoke(messages)
@@ -50,6 +62,6 @@ class SQLGenAgent:
                 "raw_response": content,
             }
 
-    def run(self, intent: dict, schema: dict) -> dict:
+    def run(self, intent: dict, schema: dict, retry_hint: str = None) -> dict:
         """Run the agent and return generated SQL."""
-        return self.generate(intent, schema)
+        return self.generate(intent, schema, retry_hint)

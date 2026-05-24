@@ -61,6 +61,7 @@ class TextToSQLPipeline:
         """
         iterations = 0
         last_error = None
+        sql = None
 
         while iterations < MAX_RETRIES:
             iterations += 1
@@ -83,8 +84,8 @@ class TextToSQLPipeline:
                     "iterations": iterations,
                 }
 
-            # Step 3: SQL Generation
-            sql_result = self.sql_gen_agent.run(intent, schema)
+            # Step 3: SQL Generation（重试时传入上次错误作为提示）
+            sql_result = self.sql_gen_agent.run(intent, schema, retry_hint=last_error)
             if "error" in sql_result:
                 return {
                     "success": False,
@@ -116,23 +117,17 @@ class TextToSQLPipeline:
                     }
                 except Exception as e:
                     last_error = f"SQL execution failed: {e}"
-                    # Continue to retry with new generation
             else:
                 # SQL failed review, get error info
                 issues = review.get("issues", [])
                 error_msgs = [f"- {issue['description']} (suggestion: {issue.get('suggestion', 'N/A')})" for issue in issues]
-                last_error = f"SQL review failed:\n" + "\n".join(error_msgs)
-
-            # If we get here, retry with a hint to fix the issues
-            if iterations < MAX_RETRIES:
-                # Could inject the error into the next iteration via context
-                pass
+                last_error = "SQL 审查未通过，问题如下：\n" + "\n".join(error_msgs)
 
         # Max retries exceeded
         return {
             "success": False,
-            "sql": sql if 'sql' in dir() else None,
-            "error": f"Max retries ({MAX_RETRIES}) exceeded. Last error: {last_error}",
+            "sql": sql,
+            "error": f"重试次数已达上限 ({MAX_RETRIES})。最后错误: {last_error}",
             "iterations": iterations,
         }
 
