@@ -111,73 +111,62 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
 
     返回: (success_count, failed_count)
     """
-    script = SCRIPT_DIR / "transcribe_local.py"
-    if not script.exists():
-        print(f"  ⚠️ 转写脚本不存在: {script}")
-        return 0, 0
+    from transcribe_local import process_directory
 
     model_size = config.get('whisper_model', 'medium')
     device = config.get('whisper_device', 'cuda')
 
-    venv_python = Path(
-        os.path.expanduser(config.get('transcribe_skill_dir', '~/.hermes/skills/bilibili-transcribe'))
-    ) / '.venv-bilibili-transcribe' / 'bin' / 'python'
+    # 设置 HuggingFace 镜像
+    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
-    env = os.environ.copy()
-    env['HF_ENDPOINT'] = 'https://hf-mirror.com'
-
-    cmd = [
-        str(venv_python), '-u', str(script),
-        m4a_dir,
-        '--model-size', model_size,
-        '--device', device,
-    ]
-    output_dir = config.get('transcribe_output_dir', '')
-    if output_dir:
+    m4a_path = Path(m4a_dir)
+    output_dir = None
+    if config.get('transcribe_output_dir', ''):
         # 按 UP 主名分子目录
         up_safe = up_name.replace('/', '_').replace('\\', '_')
-        out_subdir = os.path.join(os.path.expanduser(output_dir), up_safe)
-        cmd.extend(['--output-dir', out_subdir])
+        output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     # 传入 done_bvid 文件路径，供 transcribe_local.py 预检跳过已转写的 m4a
     done_bvid_file = _checkpoint_path(config_path, '_done_bvid')
-    if os.path.exists(os.path.expanduser(done_bvid_file)):
-        cmd.extend(['--done-bvid', os.path.expanduser(done_bvid_file)])
+    if not os.path.exists(os.path.expanduser(done_bvid_file)):
+        done_bvid_file = None
+    else:
+        done_bvid_file = Path(os.path.expanduser(done_bvid_file))
 
-    print(f"\n  转写: 调用 {script.name} (目录: {m4a_dir})")
+    print(f"\n  转写: 调用 process_directory (目录: {m4a_dir})")
     try:
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=7200)
-    except subprocess.TimeoutExpired:
-        print(f"  ⚠️ 转写超时（2小时）")
-        return 0, 0
+        result = process_directory(
+            m4a_path,
+            model_size=model_size,
+            device=device,
+            delete_audio=True,
+            output_dir=output_dir,
+            done_bvid_file=done_bvid_file,
+            min_duration=60,
+        )
     except Exception as e:
         print(f"  ⚠️ 转写异常: {e}")
         return 0, 0
 
-    # ── 解析转写结果 ──
-    # 退出码: 0=全部成功, 1=部分失败, 2=目录为空, 3=异常
-    rc = result.returncode
-
-    # 打印关键输出
-    for line in result.stdout.splitlines():
-        if '✅' in line or '⚠️' in line or '❌' in line or '完成' in line or '失败' in line:
-            print(f"    {line.strip()}")
-
-    # 从 stdout 提取 BVID（每个 "✅ 已保存: xxx [BVxxx].txt" 行）
-    import re
-    saved_bvids = re.findall(r'\[(BV[a-zA-Z0-9]+)\]\.txt', result.stdout)
-
-    # 下载 checkpoint 路径（同目录，替换后缀）
-    dl_ck_path = _checkpoint_path(config_path, '_downloaded')
-    dl_ck_path = os.path.expanduser(dl_ck_path)
-    dl_set = load_checkpoint(config_path, '_downloaded')
-
-    if rc == 2:
-        # 目录为空：正常情况，可能之前已全部转写完
+    # ── 处理转写结果 ──
+    if result.no_file:
         print(f"  ⚠️ 目录为空，无 m4a 文件")
         return 0, 0
 
-    if rc == 0:
+    # 从输出目录读取新生成的 .txt 文件，提取 BVID
+    import re
+    saved_bvids = []
+    scan_dir = output_dir if output_dir else m4a_path
+    for txt_file in scan_dir.glob("*.txt"):
+        m = re.search(r'\[(BV[a-zA-Z0-9]+)\]\.txt$', txt_file.name)
+        if m:
+            saved_bvids.append(m.group(1))
+
+    # 下载 checkpoint 路径
+    dl_set = load_checkpoint(config_path, '_downloaded')
+
+    if result.all_success:
         # 全部成功：把 downloaded 中这批 BVID 标记到 done_bvid
         success_count = len(saved_bvids)
         for bv in saved_bvids:
@@ -192,17 +181,14 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
         print(f"  ✅ 转写完成: {success_count} 个文件")
         return success_count, 0
 
-    if rc == 1:
+    if result.has_work:
         # 部分失败：只标记成功的
         success_count = len(saved_bvids)
         for bv in saved_bvids:
             append_checkpoint(config_path, '_done_bvid', [bv])
-        # printed errors already
-        return success_count, 0
+        return success_count, result.failed
 
-    # rc == 3 或其他：异常，不标记任何 BVID
-    if result.stderr:
-        print(f"    stderr: {result.stderr[-300:]}")
+    # 异常情况
     return 0, 0
 
 

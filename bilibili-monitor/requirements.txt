@@ -1,0 +1,18 @@
+# B站监控核心依赖
+yt-dlp>=2024.1.0
+faster-whisper>=1.0.0
+requests>=2.31.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# 数据存储
+duckdb>=0.10.0
+chromadb>=0.4.22
+
+# API 调用
+anthropic>=0.18.0
+openai>=1.12.0
+
+# 工具库
+pydantic>=2.5.0
+torch>=2.1.0

@@ -13,11 +13,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-# 添加 bilibili-transcribe 的路径
-TRANSCRIBE_SKILL = Path(__file__).parent.parent.parent / "bilibili-transcribe"
-sys.path.insert(0, str(TRANSCRIBE_SKILL / "scripts"))
-
-import whisper
+from faster_whisper import WhisperModel
 
 
 @dataclass
@@ -91,14 +87,16 @@ def transcribe_m4a(audio_path: Path, model_size: str, device: str, min_duration:
 
     print(f"    时长: {format_duration(duration)}")
 
-    model = whisper.load_model(model_size, device=device)
+    # faster-whisper 配置
+    compute_type = "float16" if device == "cuda" else "int8"
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-    kwargs = {"language": "zh", "fp16": device == "cuda"}
-    result = model.transcribe(str(audio_path), **kwargs)
+    # 转写
+    segments, info = model.transcribe(str(audio_path), language="zh")
 
     full_text_parts = []
-    for seg in result.get("segments", []) or []:
-        text = (seg.get("text") or "").strip()
+    for seg in segments:
+        text = (seg.text or "").strip()
         if text:
             full_text_parts.append(text)
 
@@ -164,7 +162,7 @@ def process_directory(
     out_parent = (output_dir or input_dir).resolve()
     out_parent.mkdir(parents=True, exist_ok=True)
 
-    for m4a in m4a_files:
+    for m4a in to_transcribe:
         print(f"\n转写: {m4a.name}")
         try:
             text, model = transcribe_m4a(m4a, model_size, device, min_duration=min_duration)

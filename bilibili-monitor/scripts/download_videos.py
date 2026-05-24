@@ -3,9 +3,10 @@
 使用yt-dlp，需要cookie文件来应对需要登录的操作
 """
 import os
-import subprocess
-import sys
+import time
 from typing import List, Optional
+
+import yt_dlp
 
 
 def download_video(url: str, output_dir: str, cookie_file: str, timeout: int = 600) -> Optional[str]:
@@ -14,37 +15,33 @@ def download_video(url: str, output_dir: str, cookie_file: str, timeout: int = 6
     返回: 下载的文件路径，失败返回None
     """
     os.makedirs(output_dir, exist_ok=True)
-    
-    # 使用bilibili-transcribe的venv中的yt-dlp
-    venv_python = '/home/chaoge/.hermes/skills/bilibili-transcribe/.venv-bilibili-transcribe/bin/python'
-    
-    cmd = [
-        venv_python, '-m', 'yt_dlp',
-        '-o', f'{output_dir}/%(title)s [%(id)s].%(ext)s',
-        '--extract-audio',
-        '--audio-format', 'm4a',
-        '--audio-quality', '0',
-        '--cookies', cookie_file,
-        '--no-playlist',
-        '--no-color',
-        '--newline',
-        url
-    ]
-    
+
+    # yt-dlp 配置
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': f'{output_dir}/%(title)s [%(id)s].%(ext)s',
+        'extractaudio': True,
+        'audioformat': 'm4a',
+        'audioquality': '0',
+        'cookiefile': cookie_file,
+        'noplaylist': True,
+        'quiet': False,
+        'no_warnings': False,
+        'socket_timeout': timeout,
+    }
+
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-        if result.returncode == 0:
-            return output_dir
-        else:
-            print(f"下载失败: {result.stderr[-500:]}")
-            return None
-    except subprocess.TimeoutExpired:
-        print(f"下载超时: {url}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            if info:
+                filename = ydl.prepare_filename(info)
+                # 提取音频后会变成 .m4a
+                base = os.path.splitext(filename)[0]
+                audio_file = base + '.m4a'
+                if os.path.exists(audio_file):
+                    return audio_file
+                # 如果 .m4a 不存在，返回原文件名
+                return filename if os.path.exists(filename) else None
         return None
     except Exception as e:
         print(f"下载异常: {e}")

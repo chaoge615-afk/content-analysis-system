@@ -8,23 +8,18 @@ import json
 import time
 import requests
 from pathlib import Path
+from dotenv import load_dotenv
 
+# 加载项目 .env 文件
+load_dotenv()
 
-#凭证（从 ~/.hermes/.env 读取）
-ENV_FILE = Path.home() / ".hermes" / ".env"
 
 def _load_qq_creds() -> tuple:
-    """从 .env 读取 QQ 凭证"""
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text().splitlines():
-            if line.startswith("QQ_APP_ID="):
-                app_id = line.split("=", 1)[1].strip().strip('"')
-            elif line.startswith("QQ_CLIENT_SECRET="):
-                client_secret = line.split("=", 1)[1].strip().strip('"')
-    else:
-        # fallback 到记忆中的值
-        app_id = os.getenv("QQ_APP_ID", "1903898888")
-        client_secret = os.getenv("QQ_CLIENT_SECRET", "2GUjzFWo6Pi2Ni4RoCb0QrIkDgAe9fBi")
+    """从环境变量读取 QQ 凭证"""
+    app_id = os.getenv("QQ_APP_ID", "")
+    client_secret = os.getenv("QQ_CLIENT_SECRET", "")
+    if not app_id or not client_secret:
+        raise ValueError("未设置 QQ_APP_ID 或 QQ_CLIENT_SECRET 环境变量")
     return app_id, client_secret
 
 

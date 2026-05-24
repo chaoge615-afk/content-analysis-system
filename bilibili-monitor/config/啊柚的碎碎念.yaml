@@ -9,5 +9,4 @@ notify_target: "qq:65091C38C651B44BA071725FDF78A800"
 # Whisper 转写
 whisper_model: "medium"
 whisper_device: "cuda"
-transcribe_skill_dir: "~/.hermes/skills/bilibili-transcribe"
 transcribe_output_dir: "/mnt/e/情感素材库"

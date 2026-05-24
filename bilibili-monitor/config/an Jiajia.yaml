@@ -11,6 +11,5 @@ notify_target: "qq:65091C38C651B44BA071725FDF78A800"
 whisper_model: "medium"
 whisper_device: "cuda"
 
-# bilibili-transcribe 路径（一般不改）
-transcribe_skill_dir: "~/.hermes/skills/bilibili-transcribe"
+# 转写输出目录
 transcribe_output_dir: "/mnt/e/情感素材库"
