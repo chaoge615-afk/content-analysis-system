@@ -1,18 +1,21 @@
+# Text-to-SQL 独立 docker-compose（仅用于单独部署后端，不推荐）
+# 推荐使用根目录的统一 docker-compose.yml
+
 services:
-  app:
+  text-to-sql:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: text-to-sql-app
+    container_name: text-to-sql
     environment:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimaxi.com/anthropic}
-      - DATABASE_PATH=/app/data/nutrition.db
+      - MODEL_NAME=${LLM_MODEL:-MiniMax-M2.7}
+      - DATABASE_PATH=/app/data/content.db
     volumes:
       - ./data:/app/data
     ports:
       - "8010:8010"
-      - "3000:3000"
     deploy:
       resources:
         limits:

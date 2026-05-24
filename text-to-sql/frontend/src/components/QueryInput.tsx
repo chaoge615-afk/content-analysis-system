@@ -20,7 +20,7 @@ export default function QueryInput({ onSubmit, loading }: QueryInputProps) {
       <textarea
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="输入你的问题... (例如: 今天我吃了多少蛋白质？)"
+        placeholder="输入你的问题... (例如: 桃姐最近发了几个视频？)"
         className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
         rows={3}
         disabled={loading}

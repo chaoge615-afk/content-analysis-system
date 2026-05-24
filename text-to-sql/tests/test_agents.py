@@ -1,4 +1,4 @@
-"""Test cases for Text-to-SQL Multi-Agent System."""
+"""Text-to-SQL Agent 集成测试（需要真实 LLM API）"""
 
 import sys
 from pathlib import Path
@@ -7,49 +7,43 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.orchestrator.pipeline import TextToSQLPipeline
 
 
-# Test cases covering different query types
+# 测试用例：(问题, 预期涉及的关键表)
 TEST_CASES = [
-    # 热量查询
-    ("今天我吃了多少热量？", "calorie", "today"),
-    ("这周每天吃了多少热量？", "calorie", "this_week"),
-    ("我昨天吃了多少卡路里？", "calorie", "yesterday"),
+    # UP主查询
+    ("桃姐最近发了几个视频？", "video_meta"),
+    ("一共有多少个UP主？", "video_meta"),
 
-    # 蛋白质查询
-    ("今天我吃了多少蛋白质？", "protein", "today"),
-    ("这周每天蛋白质摄入多少？", "protein", "this_week"),
-    ("我昨天摄入了多少蛋白质？", "protein", "yesterday"),
+    # 视频统计
+    ("一共有多少个视频？", "video_meta"),
+    ("各分类有多少视频？", "video_meta"),
+    ("视频平均时长是多少？", "video_meta"),
 
-    # 脂肪查询
-    ("今天我吃了多少脂肪？", "fat", "today"),
+    # 时间范围
+    ("最近一周有什么新视频？", "video_meta"),
+    ("这个月发布了多少视频？", "video_meta"),
 
-    # 碳水查询
-    ("今天我吃了多少碳水？", "carb", "today"),
+    # 排序/限制
+    ("最近的10个视频是什么？", "video_meta"),
+    ("哪个UP主视频最多？", "video_meta"),
 
-    # 目标对比
-    ("我今天吃的蛋白质够不够？", "protein", "today"),
-    ("我今天热量达标了吗？", "calorie", "today"),
-
-    # 趋势分析
-    ("这周每天的营养摄入怎么样？", "all", "this_week"),
-
-    # 餐次查询
-    ("我午餐吃了什么？", "meal_detail", "lunch"),
+    # 关键词搜索
+    ("有没有关于冷暴力的视频？", "video_meta"),
 ]
 
 
 def run_tests():
     """Run all test cases."""
     print("\n" + "=" * 60)
-    print("  Text-to-SQL Multi-Agent System - Test Suite")
+    print("  Text-to-SQL Multi-Agent System - 集成测试")
     print("=" * 60)
 
     pipeline = TextToSQLPipeline()
     results = []
 
-    for i, (question, target_type, time_range) in enumerate(TEST_CASES, 1):
+    for i, (question, expected_table) in enumerate(TEST_CASES, 1):
         print(f"\n[Test {i}/{len(TEST_CASES)}]")
         print(f"问题: {question}")
-        print(f"预期: target={target_type}, range={time_range}")
+        print(f"预期涉及表: {expected_table}")
 
         try:
             result = pipeline.run(question)
@@ -58,13 +52,18 @@ def run_tests():
 
             if result["success"]:
                 print(f"SQL: {result['sql']}")
-                print(f"回答: {result['answer']}")
+                print(f"回答: {result['answer'][:100]}")
+                # 验证 SQL 是否涉及预期表
+                if expected_table.lower() in result['sql'].lower():
+                    print(f"✓ SQL 包含预期表 {expected_table}")
+                else:
+                    print(f"✗ SQL 未包含预期表 {expected_table}")
             else:
-                print(f"错误: {result['error']}")
+                print(f"错误: {result['error'][:200]}")
 
             results.append({
                 "question": question,
-                "expected": (target_type, time_range),
+                "expected_table": expected_table,
                 "actual": result,
                 "passed": result["success"],
             })
@@ -72,7 +71,7 @@ def run_tests():
             print(f"异常: {e}")
             results.append({
                 "question": question,
-                "expected": (target_type, time_range),
+                "expected_table": expected_table,
                 "actual": {"error": str(e)},
                 "passed": False,
             })
@@ -93,6 +92,5 @@ def run_tests():
 
 
 if __name__ == "__main__":
-    import sys
     success = run_tests()
     sys.exit(0 if success else 1)

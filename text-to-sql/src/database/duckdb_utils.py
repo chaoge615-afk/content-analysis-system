@@ -56,10 +56,20 @@ def get_table_info(table_name: str) -> dict:
     conn = get_connection()
     try:
         # Get column info
+        # DuckDB DESCRIBE 返回: (column_name, column_type, null, key, default, extra)
         columns = conn.execute(f"DESCRIBE {table_name}").fetchall()
         return {
             "table": table_name,
-            "columns": [{"name": col[0], "type": col[1], "comment": col[2]} for col in columns]
+            "columns": [
+                {
+                    "name": col[0],
+                    "type": col[1],
+                    "nullable": col[2] == "YES",
+                    "key": col[3],
+                    "default": col[4],
+                }
+                for col in columns
+            ]
         }
     finally:
         conn.close()
@@ -83,10 +93,20 @@ def get_all_schemas() -> list:
         schemas = []
         for table in tables:
             try:
+                # DuckDB DESCRIBE 返回: (column_name, column_type, null, key, default, extra)
                 columns = conn.execute(f"DESCRIBE {table}").fetchall()
                 schemas.append({
                     "table": table,
-                    "columns": [{"name": col[0], "type": col[1], "comment": col[2]} for col in columns]
+                    "columns": [
+                        {
+                            "name": col[0],
+                            "type": col[1],
+                            "nullable": col[2] == "YES",
+                            "key": col[3],
+                            "default": col[4],
+                        }
+                        for col in columns
+                    ]
                 })
             except Exception as e:
                 print(f"Warning: Failed to get schema for table {table}: {e}")

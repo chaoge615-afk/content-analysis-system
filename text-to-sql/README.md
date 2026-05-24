@@ -46,7 +46,7 @@ text-to-sql/
 ├── tests/
 │   └── test_pipeline.py     # 单元测试
 ├── data/
-│   └── nutrition.db          # DuckDB 数据库（已改名为 content.db）
+│   └── content.db             # DuckDB 数据库（与 bilibili-monitor 共享）
 ├── .env                     # API 配置
 ├── requirements.txt
 ├── Dockerfile
@@ -243,7 +243,7 @@ MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
 MODEL_NAME=MiniMax-M2.7
 
 # Database Configuration
-DATABASE_PATH=./data/nutrition.db
+DATABASE_PATH=../bilibili-monitor/data/content.db
 
 # Agent Configuration
 MAX_RETRIES=3
