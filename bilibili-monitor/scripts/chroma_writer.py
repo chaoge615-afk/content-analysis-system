@@ -76,22 +76,22 @@ class ChromaWriter:
         """Initialize ChromaDB writer with SiliconFlow embeddings."""
 
         # Set up persist directory
-        # 默认使用 scripts/data/chromadb（与迁移脚本写入路径一致）
+        # 默认使用 bilibili-monitor/data/chromadb（与 content.db 同级）
         if persist_directory is None:
             persist_directory = os.getenv(
                 "CHROMA_PERSIST_DIR",
-                str(Path(__file__).parent / "data" / "chromadb"),
+                str(Path(__file__).parent.parent / "data" / "chromadb"),
             )
 
         Path(persist_directory).mkdir(parents=True, exist_ok=True)
 
         # ChromaDB Rust 后端在 Windows 上不支持路径含非 ASCII 字符（如中文）
-        # 临时切换到脚本目录，使用相对路径初始化
+        # 临时切换到 bilibili-monitor 目录，使用相对路径初始化
         _original_cwd = os.getcwd()
-        _scripts_dir = str(Path(__file__).parent)
+        _project_dir = str(Path(__file__).parent.parent)
         try:
-            os.chdir(_scripts_dir)
-            _rel_path = os.path.relpath(persist_directory, _scripts_dir)
+            os.chdir(_project_dir)
+            _rel_path = os.path.relpath(persist_directory, _project_dir)
             self.client = chromadb.PersistentClient(
                 path=_rel_path,
                 settings=Settings(anonymized_telemetry=False),
