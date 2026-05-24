@@ -1,0 +1,7 @@
+data
+downloads
+transcripts
+chromadb
+__pycache__
+*.pyc
+.git
