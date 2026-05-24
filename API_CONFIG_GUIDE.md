@@ -1,0 +1,245 @@
+# 统一 API 配置使用指南
+
+## 概述
+
+所有子项目共享根目录的 `.env` 文件，按功能分为 **Embedding** 和 **Chat** 两类 API。
+
+## 配置结构
+
+```
+ai项目/
+├── .env                    # 统一配置文件（不提交到 git）
+├── .env.example            # 配置模板
+└── shared_config.py        # 统一配置加载器
+```
+
+## API 分类
+
+### 1. Embedding API（文本向量化）
+
+**用途**：语义检索、知识库构建、相似度计算
+
+**提供商**：SiliconFlow（硅基流动）
+
+**配置项**：
+```bash
+EMBEDDING_PROVIDER=siliconflow
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_MODEL=BAAI/bge-large-zh-v1.5
+```
+
+**使用项目**：
+- personal-knowledge-rag
+- bilibili-monitor（ChromaDB 写入）
+- relationship-analysis
+
+### 2. Chat API（智能对话）
+
+**用途**：内容精炼、问答生成、意图分类、SQL 生成
+
+#### 2.1 MiniMax M2.7（主 Chat API）
+
+**提供商**：MiniMax（Anthropic 兼容接口）
+
+**配置项**：
+```bash
+CHAT_PROVIDER=minimax
+CHAT_API_KEY=eyJxxx
+CHAT_BASE_URL=https://api.minimaxi.com/anthropic
+CHAT_MODEL=MiniMax-M2.7
+MINIMAX_GROUP_ID=0
+```
+
+**使用项目**：
+- text-to-sql（SQL 生成）
+- personal-knowledge-rag（问答）
+- bilibili-monitor（意图分类）
+
+#### 2.2 DeepSeek V4 Pro（精炼专用）
+
+**提供商**：DeepSeek（自定义代理端点）
+
+**配置项**：
+```bash
+REFINE_API_URL=http://140.143.147.125:3300/v1/chat/completions
+REFINE_API_KEY=sk-xxx
+REFINE_MODEL=deepseek-v4-pro
+```
+
+**使用项目**：
+- bilibili-monitor（refiner.py 内容精炼）
+- refine_batch.py（批量精炼）
+
+## 在子项目中使用
+
+### 方式 1：直接导入 shared_config（推荐）
+
+```python
+import sys
+from pathlib import Path
+
+# 添加根目录到路径
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
+from shared_config import config
+
+# 使用 Embedding 配置
+embedding_api_key = config.embedding.api_key
+embedding_base_url = config.embedding.base_url
+embedding_model = config.embedding.model
+
+# 使用 Chat 配置
+chat_api_key = config.chat.api_key
+chat_base_url = config.chat.base_url
+chat_model = config.chat.model
+
+# 使用 Refine 配置
+refine_url = config.chat.refine_url
+refine_key = config.chat.refine_key
+```
+
+### 方式 2：使用兼容性环境变量
+
+`shared_config.py` 会自动设置以下兼容性环境变量，旧代码无需修改：
+
+```python
+# 自动映射
+SILICONFLOW_API_KEY ← EMBEDDING_API_KEY
+SILICONFLOW_BASE_URL ← EMBEDDING_BASE_URL
+MINIMAX_API_KEY ← CHAT_API_KEY
+MINIMAX_BASE_URL ← CHAT_BASE_URL
+REFINE_API_URL ← REFINE_API_URL
+REFINE_API_KEY ← REFINE_API_KEY
+REFINE_MODEL ← REFINE_MODEL
+```
+
+只需在代码开头导入：
+
+```python
+from shared_config import config  # 自动设置兼容环境变量
+
+# 然后正常使用旧的环境变量名
+import os
+api_key = os.getenv("SILICONFLOW_API_KEY")  # 自动从 EMBEDDING_API_KEY 映射
+```
+
+### 方式 3：检查配置状态
+
+```python
+from shared_config import config
+
+# 打印配置状态
+config.print_status()
+
+# 或获取详细状态
+status = config.validate()
+print(status)
+# {
+#     "embedding": {"configured": True, "provider": "siliconflow", "model": "BAAI/bge-large-zh-v1.5"},
+#     "chat": {"configured": True, "provider": "minimax", "model": "MiniMax-M2.7"},
+#     "refine": {"configured": True, "model": "deepseek-v4-pro"}
+# }
+```
+
+## 项目集成示例
+
+### bilibili-monitor
+
+```python
+# scripts/refiner.py
+from shared_config import config
+
+API_URL = config.chat.refine_url
+API_KEY = config.chat.refine_key
+REFINE_MODEL = config.chat.refine_model
+```
+
+### personal-knowledge-rag
+
+```python
+# rag_engine.py
+from shared_config import config
+
+class MinimaxEmbeddings(Embeddings):
+    def __init__(self):
+        self.api_key = config.embedding.api_key
+        self.base_url = config.embedding.base_url
+        self.model = config.embedding.model
+```
+
+### text-to-sql
+
+```python
+# src/config.py
+from shared_config import config
+
+MINIMAX_API_KEY = config.chat.api_key
+MINIMAX_BASE_URL = config.chat.base_url
+MODEL_NAME = config.chat.model
+```
+
+## API 申请
+
+- **SiliconFlow**：https://siliconflow.cn/
+  - 注册送积分，Embedding 模型免费额度充足
+  - 推荐模型：BAAI/bge-large-zh-v1.5（中文优化）
+
+- **MiniMax**：https://www.minimaxi.com/
+  - M2.7 模型，Anthropic 兼容接口
+  - 适合复杂推理和代码生成
+
+- **DeepSeek**：通过自定义代理访问
+  - V4 Pro 模型，精炼效果好
+  - 端点：http://140.143.147.125:3300
+
+## 常见问题
+
+### Q: 为什么不直接在各项目中配置 .env？
+
+A: 统一配置的优势：
+1. **一处配置，多处使用**：避免在 4 个项目中重复填写相同的 API Key
+2. **集中管理**：所有 API 密钥在一个文件中，便于备份和轮换
+3. **向后兼容**：自动设置旧环境变量名，现有代码无需修改
+4. **分类清晰**：按功能（Embedding/Chat）分组，而非按项目
+
+### Q: 如果某个项目需要特殊的 API 配置怎么办？
+
+A: 可以在项目自己的 `.env` 中覆盖：
+
+```python
+# 项目级 .env（优先级高于根目录）
+CHAT_MODEL=custom-model
+```
+
+```python
+# 代码中手动覆盖
+from shared_config import config
+import os
+
+# 项目级配置优先
+model = os.getenv("CHAT_MODEL", config.chat.model)
+```
+
+### Q: 如何测试配置是否正确？
+
+A: 运行配置检查：
+
+```bash
+cd ai项目
+python shared_config.py
+```
+
+输出示例：
+```
+=== API Config Status ===
+[OK] EMBEDDING: siliconflow - BAAI/bge-large-zh-v1.5
+[OK] CHAT: minimax - MiniMax-M2.7
+[OK] REFINE: N/A - deepseek-v4-pro
+```
+
+## 更新日志
+
+- **2026-05-24**：初始版本，统一 Embedding 和 Chat 配置
+- 支持项目：bilibili-monitor, personal-knowledge-rag, text-to-sql, relationship-analysis
