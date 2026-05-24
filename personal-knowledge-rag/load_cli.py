@@ -19,6 +19,11 @@ def main():
         help="加载前先清空现有知识库"
     )
     parser.add_argument(
+        "--video", "-V",
+        action="store_true",
+        help="加载视频精炼内容到 video_knowledge collection"
+    )
+    parser.add_argument(
         "--stats", "-s",
         action="store_true",
         help="只显示统计信息，不加载"
@@ -47,23 +52,36 @@ def main():
         if args.stats:
             stats = rag.get_stats()
             print("\n=== 知识库统计 ===")
-            print(f"  总文本块数：{stats['total_chunks']}")
+            print(f"  知识库文本块：{stats['knowledge_chunks']}")
+            print(f"  视频库文本块：{stats['video_chunks']}")
+            print(f"  总计：{stats['total_chunks']}")
             print(f"  分块大小：{stats['chunk_size']}")
             print(f"  重叠大小：{stats['chunk_overlap']}")
             print(f"  Top-K：{stats['top_k']}")
             return
 
-        if args.clear:
-            logger.info("清空现有知识库...")
-            rag.clear_database()
-
-        logger.info("开始加载知识库...")
-        count = rag.load_knowledge()
-
-        if count > 0:
-            logger.info(f"=== 加载完成，共 {count} 个文本块 ===")
+        if args.video:
+            # 加载视频知识库
+            if args.clear:
+                logger.info("清空视频知识库...")
+                rag.clear_database("video_knowledge")
+            logger.info("开始加载视频知识库...")
+            count = rag.load_video_knowledge()
+            if count > 0:
+                logger.info(f"=== 视频知识库加载完成，共 {count} 个文本块 ===")
+            else:
+                logger.warning("=== 视频知识库加载完成，未找到任何文档 ===")
         else:
-            logger.warning("=== 加载完成，未找到任何文档 ===")
+            # 加载知识库
+            if args.clear:
+                logger.info("清空现有知识库...")
+                rag.clear_database("knowledge")
+            logger.info("开始加载知识库...")
+            count = rag.load_knowledge()
+            if count > 0:
+                logger.info(f"=== 加载完成，共 {count} 个文本块 ===")
+            else:
+                logger.warning("=== 加载完成，未找到任何文档 ===")
         sys.exit(0)
     except Exception as e:
         logger.error(f"=== 加载失败: {str(e)} ===", exc_info=True)

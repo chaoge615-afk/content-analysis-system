@@ -1,10 +1,17 @@
 """
-个人知识库RAG引擎
-核心功能：加载markdown文件 → 分割chunk → 生成embedding → 存储到ChromaDB → 检索 + 生成回答
+个人知识库RAG引擎（Phase 2 增强版）
+核心功能：
+  - 双 collection：knowledge（markdown 个人知识）+ video_knowledge（B站视频精炼）
+  - 支持 .md 和 .txt 文件加载
+  - metadata 过滤检索（按 UP主、分类、日期等）
+  - BM25 + 向量混合检索
 """
+
 import os
+import re
 import requests
-from typing import List, Dict
+from typing import List, Dict, Optional
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -12,34 +19,41 @@ from langchain_openai import ChatOpenAI
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_core.prompts import PromptTemplate
 from langchain_core.embeddings import Embeddings
+from langchain_core.documents import Document
+
+# 混合检索模块
+from hybrid_search import BM25, HybridSearch
 
 # 加载环境变量
 load_dotenv()
 
+
 class MinimaxEmbeddings(Embeddings):
-    """SiliconFlow Embedding 适配"""
-    def __init__(self, api_key: str, model: str = "BAAI/bge-large-zh-v1.5", base_url: str = "https://api.siliconflow.cn/v1"):
+    """SiliconFlow Embedding 适配（BAAI/bge-large-zh-v1.5）"""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "BAAI/bge-large-zh-v1.5",
+        base_url: str = "https://api.siliconflow.cn/v1",
+    ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """批量embed文档"""
+        """批量 embed 文档"""
         url = f"{self.base_url}/embeddings"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
-        data = {
-            "input": texts,
-            "model": self.model
-        }
+        data = {"input": texts, "model": self.model}
         try:
             response = requests.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
             result = response.json()
 
-            # DeepSeek 返回格式: {"data": [{"embedding": [...]}]}
             if "data" in result:
                 return [item["embedding"] for item in result["data"]]
             else:
@@ -48,11 +62,45 @@ class MinimaxEmbeddings(Embeddings):
             raise
 
     def embed_query(self, text: str) -> List[float]:
-        """embed单个查询"""
+        """embed 单个查询"""
         vectors = self.embed_documents([text])
         if not vectors or vectors[0] is None:
             raise ValueError("Embedding returned empty or None")
         return vectors[0]
+
+
+def extract_video_metadata(file_path: str) -> dict:
+    """
+    从文件路径提取视频 metadata
+    文件命名约定: {bvid}_{title}.txt 或 {title}.txt
+    目录结构: <base_dir>/<category>/xxx.txt
+    """
+    path = Path(file_path)
+    metadata = {
+        "content_type": "full",
+        "source": str(file_path),
+    }
+
+    # 从文件名提取 bvid（BV 开头的 ID）
+    filename = path.stem  # 不含扩展名
+    bvid_match = re.search(r'(BV[a-zA-Z0-9]+)', filename)
+    if bvid_match:
+        metadata["bvid"] = bvid_match.group(1)
+
+    # 从目录名提取分类（如 01_喜欢、02_沟通 等）
+    parent = path.parent.name
+    if parent and parent != ".":
+        metadata["category"] = parent
+
+    # 从文件名提取 UP 主名（如果有）
+    # 常见格式: up_name_bvid_title.txt 或 bvid_title.txt
+    parts = filename.split("_")
+    if len(parts) >= 3 and not parts[0].startswith("BV"):
+        # 第一段不是 BV 开头，可能是 UP 主名
+        metadata["up_name"] = parts[0]
+
+    return metadata
+
 
 class KnowledgeRAG:
     def __init__(self):
@@ -60,16 +108,31 @@ class KnowledgeRAG:
         self.api_key = os.getenv("DASHSCOPE_API_KEY")
         self.group_id = os.getenv("MINIMAX_GROUP_ID")
         self.llm_model = os.getenv("LLM_MODEL", "MiniMax-M2.7")
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", "embo-01")
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
         self.knowledge_dir = os.getenv("KNOWLEDGE_DIR", "./knowledge")
         self.persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "500"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "50"))
         self.top_k = int(os.getenv("TOP_K", "5"))
 
-        # API base URL，从环境变量读取
+        # 视频知识库目录
+        self.video_knowledge_dir = os.getenv(
+            "VIDEO_KNOWLEDGE_DIR", "./video_knowledge"
+        )
+
+        # ChromaDB 远程连接（用于 video_knowledge collection）
+        self.chroma_host = os.getenv("CHROMA_HOST")  # 如 "localhost"
+        self.chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+
+        # API base URL
         self.base_url = os.getenv("BASE_URL", "https://api.minimaxi.com/anthropic")
-        self.embedding_base_url = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
+        self.embedding_base_url = os.getenv(
+            "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"
+        )
+
+        # 混合检索
+        self._hybrid_search = HybridSearch(rank_cap=3)
+        self._video_bm25: Optional[BM25] = None
 
         # 初始化组件
         self._init_embeddings()
@@ -78,47 +141,66 @@ class KnowledgeRAG:
         self._init_prompt()
 
     def _init_embeddings(self):
-        """初始化SiliconFlow embedding模型"""
+        """初始化 SiliconFlow embedding 模型"""
         siliconflow_api_key = os.getenv("SILICONFLOW_API_KEY")
         if not siliconflow_api_key:
-            raise ValueError("请在.env中配置SILICONFLOW_API_KEY")
+            raise ValueError("请在 .env 中配置 SILICONFLOW_API_KEY")
         self.embeddings = MinimaxEmbeddings(
             api_key=siliconflow_api_key,
             model=self.embedding_model,
-            base_url=self.embedding_base_url
+            base_url=self.embedding_base_url,
         )
 
     def _init_llm(self):
         """初始化大语言模型"""
-        # LLM 也需要GroupId吗？如果也是用Minimax OpenAI兼容格式，需要处理
-        # 检查base_url是否需要追加group_id参数
-        llm_base_url = self.base_url
+        if not self.api_key:
+            raise ValueError("请在 .env 中配置 DASHSCOPE_API_KEY（MiniMax API Key）")
         self.llm = ChatOpenAI(
             api_key=self.api_key,
-            base_url=llm_base_url,
+            base_url=self.base_url,
             model=self.llm_model,
-            temperature=0.1,  # 知识问答温度低一点更准确
-            extra_query={"GroupId": self.group_id} if self.group_id else {}
+            temperature=0.1,
+            extra_query={"GroupId": self.group_id} if self.group_id else {},
         )
 
     def _init_vector_db(self):
-        """初始化Chroma向量数据库"""
-        if os.path.exists(self.persist_dir) and len(os.listdir(self.persist_dir)) > 0:
-            # 如果已有数据库，直接加载
-            self.vector_db = Chroma(
-                persist_directory=self.persist_dir,
-                embedding_function=self.embeddings
+        """初始化 ChromaDB 向量数据库（双 collection）"""
+        # Collection 1: knowledge（本地持久化，向后兼容）
+        os.makedirs(self.knowledge_dir, exist_ok=True)
+        self.vector_db = Chroma(
+            collection_name="knowledge",
+            persist_directory=self.persist_dir,
+            embedding_function=self.embeddings,
+        )
+
+        # Collection 2: video_knowledge
+        if self.chroma_host:
+            # 远程 ChromaDB 容器
+            import chromadb
+
+            remote_client = chromadb.HttpClient(
+                host=self.chroma_host, port=self.chroma_port
+            )
+            self.video_vector_db = Chroma(
+                client=remote_client,
+                collection_name="video_knowledge",
+                embedding_function=self.embeddings,
+            )
+            print(
+                f"[RAG] video_knowledge 连接远程 ChromaDB: {self.chroma_host}:{self.chroma_port}"
             )
         else:
-            # 新建空数据库
-            self.vector_db = Chroma(
-                persist_directory=self.persist_dir,
-                embedding_function=self.embeddings
+            # 本地持久化（开发模式）
+            video_persist_dir = os.path.join(self.persist_dir, "_video")
+            self.video_vector_db = Chroma(
+                collection_name="video_knowledge",
+                persist_directory=video_persist_dir,
+                embedding_function=self.embeddings,
             )
+            print(f"[RAG] video_knowledge 使用本地持久化: {video_persist_dir}")
 
     def _init_prompt(self):
-        """初始化prompt模板"""
-        # 自定义prompt，让回答更贴合知识库
+        """初始化 prompt 模板"""
         prompt_template = """你是一个基于用户个人知识库的问答助手。
 请根据提供的上下文信息回答用户的问题。如果上下文中没有找到答案，请直接说"我在知识库中没有找到相关内容"。
 不要编造信息，也不要引用无关内容。
@@ -131,66 +213,244 @@ class KnowledgeRAG:
 回答："""
 
         self.prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
+            template=prompt_template, input_variables=["context", "question"]
         )
 
-    def load_knowledge(self) -> int:
-        """加载knowledge目录下所有markdown文件，更新到向量库"""
-        # 检查GroupId
-        if not self.group_id:
-            print("警告: MINIMAX_GROUP_ID 未配置，请检查 .env 文件", flush=True)
-            return 0
+    # ========== 知识库加载 ==========
 
-        # 加载所有markdown文件
-        loader = DirectoryLoader(
+    def load_knowledge(self) -> int:
+        """
+        加载 knowledge 目录下所有 markdown 和 txt 文件，更新到向量库
+        """
+        # 加载 markdown 文件
+        md_loader = DirectoryLoader(
             self.knowledge_dir,
             glob="**/*.md",
             loader_cls=TextLoader,
-            loader_kwargs={"encoding": "utf-8"}
+            loader_kwargs={"encoding": "utf-8"},
         )
 
-        documents = loader.load()
+        # 同时加载 txt 文件
+        txt_loader = DirectoryLoader(
+            self.knowledge_dir,
+            glob="**/*.txt",
+            loader_cls=TextLoader,
+            loader_kwargs={"encoding": "utf-8"},
+        )
+
+        documents = []
+        try:
+            documents.extend(md_loader.load())
+        except Exception:
+            pass
+        try:
+            documents.extend(txt_loader.load())
+        except Exception:
+            pass
+
         if not documents:
-            print(f"在 {self.knowledge_dir} 目录下没有找到任何markdown文件", flush=True)
+            print(f"在 {self.knowledge_dir} 目录下没有找到任何文件", flush=True)
             return 0
 
-        print(f"找到 {len(documents)} 个markdown文件", flush=True)
+        print(f"找到 {len(documents)} 个文件", flush=True)
 
         # 文本分块
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
             separators=["\n\n", "\n", "。", "，", " ", ""],
-            keep_separator=True
+            keep_separator=True,
         )
 
         chunks = text_splitter.split_documents(documents)
         print(f"分割为 {len(chunks)} 个文本块", flush=True)
 
-        # 分批添加到向量库，避免请求过大导致413错误
+        # 分批添加到向量库，避免请求过大导致 413 错误
         batch_size = 20
         for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i + batch_size]
+            batch = chunks[i : i + batch_size]
             self.vector_db.add_documents(batch)
-            print(f"已处理 {min(i + batch_size, len(chunks))}/{len(chunks)} 个文本块", flush=True)
+            print(
+                f"已处理 {min(i + batch_size, len(chunks))}/{len(chunks)} 个文本块",
+                flush=True,
+            )
 
-        # ChromaDB 自动持久化，无需手动调用
-        print(f"知识库更新完成，当前总共有 {self.vector_db._collection.count()} 个文档块", flush=True)
-
+        print(
+            f"知识库更新完成，当前总共有 {self.vector_db._collection.count()} 个文档块",
+            flush=True,
+        )
         return len(chunks)
 
-    def clear_database(self):
-        """清空向量数据库"""
-        self.vector_db.delete_collection()
-        self._init_vector_db()
-        self._init_prompt()
-        print("向量数据库已清空")
+    def load_video_knowledge(self, source_dir: str = None) -> int:
+        """
+        加载视频精炼内容到 video_knowledge collection
+        自动从文件名/路径提取 metadata（bvid、up_name、category 等）
 
-    def ask(self, question: str) -> str:
-        """提问，获取回答"""
+        Args:
+            source_dir: 视频精炼文件目录，默认使用 VIDEO_KNOWLEDGE_DIR 环境变量
+        """
+        source_dir = source_dir or self.video_knowledge_dir
+
+        if not os.path.exists(source_dir):
+            print(f"视频知识目录不存在: {source_dir}", flush=True)
+            return 0
+
+        # 加载所有 txt 文件
+        loader = DirectoryLoader(
+            source_dir,
+            glob="**/*.txt",
+            loader_cls=TextLoader,
+            loader_kwargs={"encoding": "utf-8"},
+        )
+
+        documents = loader.load()
+        if not documents:
+            print(f"在 {source_dir} 目录下没有找到任何 txt 文件", flush=True)
+            return 0
+
+        print(f"找到 {len(documents)} 个视频精炼文件", flush=True)
+
+        # 文本分块（视频精炼内容通常较短，用较小的 chunk_size）
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", "。", "，", " ", ""],
+            keep_separator=True,
+        )
+
+        chunks = text_splitter.split_documents(documents)
+
+        # 为每个 chunk 附加 metadata
+        for chunk in chunks:
+            source = chunk.metadata.get("source", "")
+            video_meta = extract_video_metadata(source)
+            chunk.metadata.update(video_meta)
+            # 标记 chunk 在原文中的序号
+            chunk.metadata["chunk_index"] = chunks.index(chunk)
+
+        print(f"分割为 {len(chunks)} 个文本块（含 metadata）", flush=True)
+
+        # 分批添加到 video_knowledge collection
+        batch_size = 20
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
+            self.video_vector_db.add_documents(batch)
+            print(
+                f"已处理 {min(i + batch_size, len(chunks))}/{len(chunks)} 个文本块",
+                flush=True,
+            )
+
+        # 清空 BM25 缓存，下次搜索时重建
+        self._video_bm25 = None
+
+        count = self.video_vector_db._collection.count()
+        print(f"视频知识库更新完成，当前总共有 {count} 个文档块", flush=True)
+        return len(chunks)
+
+    # ========== 检索 ==========
+
+    def _get_video_docs_text(self) -> List[str]:
+        """获取 video_knowledge 所有文档的文本（用于 BM25 索引）"""
+        try:
+            results = self.video_vector_db._collection.get()
+            return results.get("documents", [])
+        except Exception as e:
+            print(f"[RAG] 获取视频文档失败: {e}")
+            return []
+
+    def ask_video(
+        self,
+        question: str,
+        metadata_filter: dict = None,
+        use_hybrid: bool = True,
+    ) -> str:
+        """
+        针对 video_knowledge 的问答（支持 metadata 过滤 + 混合检索）
+
+        Args:
+            question: 用户问题
+            metadata_filter: 过滤条件，如 {"up_name": "桃姐", "category": "01_喜欢"}
+            use_hybrid: 是否使用 BM25+向量混合检索
+        """
+        if self.video_vector_db._collection.count() == 0:
+            return "视频知识库还是空的，请先加载视频精炼内容"
+
+        # 构建 ChromaDB where 过滤条件
+        where_filter = self._build_where_filter(metadata_filter)
+
+        if use_hybrid:
+            docs = self._hybrid_search_video(question, where_filter)
+        else:
+            # 纯向量检索
+            search_kwargs = {"k": self.top_k}
+            if where_filter:
+                search_kwargs["filter"] = where_filter
+            retriever = self.video_vector_db.as_retriever(
+                search_kwargs=search_kwargs
+            )
+            docs = retriever.invoke(question)
+
+        if not docs:
+            return "在视频知识库中没有找到相关内容"
+
+        # 拼接上下文（附带来源信息）
+        context_parts = []
+        for doc in docs:
+            meta = doc.metadata
+            source_info = ""
+            if meta.get("up_name"):
+                source_info += f"[UP主: {meta['up_name']}] "
+            if meta.get("category"):
+                source_info += f"[分类: {meta['category']}] "
+            if meta.get("bvid"):
+                source_info += f"[BV号: {meta['bvid']}] "
+            context_parts.append(
+                f"{source_info}\n{doc.page_content}" if source_info else doc.page_content
+            )
+
+        context = "\n\n---\n\n".join(context_parts)
+
+        # 生成 prompt
+        prompt_text = self.prompt.format(context=context, question=question)
+
+        # 调用 LLM
+        try:
+            result = self.llm.invoke(prompt_text)
+            if result is None:
+                return "LLM 返回了空结果，请检查 API 配置"
+
+            content = result.content if hasattr(result, "content") else str(result)
+            if content is None:
+                return "LLM 返回的内容为空，请检查 API 配置"
+
+            # 过滤掉思考过程标签
+            content = re.sub(
+                r"<think>.*?</think>", "", content, flags=re.DOTALL
+            ).strip()
+            return content
+        except Exception as e:
+            return f"调用 LLM 时出错: {str(e)}"
+
+    def ask(
+        self,
+        question: str,
+        collection: str = "knowledge",
+        metadata_filter: dict = None,
+    ) -> str:
+        """
+        通用问答方法（向后兼容）
+
+        Args:
+            question: 用户问题
+            collection: "knowledge" 或 "video_knowledge"
+            metadata_filter: 过滤条件（仅 video_knowledge 有效）
+        """
+        if collection == "video_knowledge":
+            return self.ask_video(question, metadata_filter=metadata_filter)
+
+        # 原有 knowledge 逻辑
         if self.vector_db._collection.count() == 0:
-            return "知识库还是空的，请先加载markdown文件"
+            return "知识库还是空的，请先加载文件"
 
         # 检索相关文档
         retriever = self.vector_db.as_retriever(search_kwargs={"k": self.top_k})
@@ -202,31 +462,186 @@ class KnowledgeRAG:
         # 拼接上下文
         context = "\n\n".join([doc.page_content for doc in docs])
 
-        # 生成prompt
+        # 生成 prompt
         prompt_text = self.prompt.format(context=context, question=question)
 
-        # 调用LLM生成回答
+        # 调用 LLM
         try:
             result = self.llm.invoke(prompt_text)
             if result is None:
-                return "LLM返回了空结果，请检查API配置"
+                return "LLM 返回了空结果，请检查 API 配置"
 
-            content = result.content if hasattr(result, 'content') else str(result)
+            content = result.content if hasattr(result, "content") else str(result)
             if content is None:
-                return "LLM返回的内容为空，请检查API配置"
+                return "LLM 返回的内容为空，请检查 API 配置"
 
-            # 过滤掉思考过程标签
-            import re
-            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+            content = re.sub(
+                r"<think>.*?</think>", "", content, flags=re.DOTALL
+            ).strip()
             return content
         except Exception as e:
-            return f"调用LLM时出错: {str(e)}"
+            return f"调用 LLM 时出错: {str(e)}"
+
+    def _hybrid_search_video(
+        self, question: str, where_filter: dict = None
+    ) -> List[Document]:
+        """BM25 + 向量混合检索视频知识库"""
+        # 懒加载 BM25 索引
+        if self._video_bm25 is None:
+            print("[混合检索] 构建 BM25 索引...", flush=True)
+            docs_text = self._get_video_docs_text()
+            if docs_text:
+                self._video_bm25 = self._hybrid_search.build_bm25_index(docs_text)
+                print(
+                    f"[混合检索] BM25 索引构建完成，{len(docs_text)} 个文档",
+                    flush=True,
+                )
+
+        # 获取所有文档的 metadata（用于过滤）
+        all_docs_data = self.video_vector_db._collection.get(include=["documents", "metadatas"])
+        all_documents = all_docs_data.get("documents", [])
+        all_metadatas = all_docs_data.get("metadatas", [])
+
+        # 构建向量检索回调
+        def vector_search_fn(query, top_k):
+            search_kwargs = {"k": top_k}
+            if where_filter:
+                search_kwargs["filter"] = where_filter
+            retriever = self.video_vector_db.as_retriever(
+                search_kwargs=search_kwargs
+            )
+            docs = retriever.invoke(query)
+            # 将检索结果映射回全局索引
+            results = []
+            for doc in docs:
+                try:
+                    idx = all_documents.index(doc.page_content)
+                    # 计算简单的相似度分数（用排名代替）
+                    results.append((1.0 / (len(results) + 1), idx))
+                except ValueError:
+                    continue
+            return results
+
+        # 执行混合检索
+        fusion_results = self._hybrid_search.search(
+            query=question,
+            bm25=self._video_bm25,
+            vector_search_fn=vector_search_fn,
+            top_k=self.top_k,
+        )
+
+        # 将结果转换为 Document 列表
+        result_docs = []
+        for doc_idx, score in fusion_results:
+            if doc_idx < len(all_documents):
+                meta = all_metadatas[doc_idx] if doc_idx < len(all_metadatas) else {}
+
+                # 应用 metadata 过滤
+                if where_filter and not self._matches_filter(meta, where_filter):
+                    continue
+
+                result_docs.append(
+                    Document(
+                        page_content=all_documents[doc_idx],
+                        metadata=meta,
+                    )
+                )
+
+        return result_docs
+
+    @staticmethod
+    def _build_where_filter(metadata_filter: dict) -> Optional[dict]:
+        """
+        将简单的 metadata_filter 转换为 ChromaDB where 条件
+
+        支持的过滤字段: up_name, category, bvid
+        """
+        if not metadata_filter:
+            return None
+
+        conditions = []
+        for key, value in metadata_filter.items():
+            if not value:
+                continue
+            if key in ("up_name", "category", "bvid", "content_type"):
+                conditions.append({key: {"$eq": value}})
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
+
+    @staticmethod
+    def _matches_filter(metadata: dict, where_filter: dict) -> bool:
+        """检查 metadata 是否匹配 where 过滤条件"""
+        if "$and" in where_filter:
+            return all(
+                KnowledgeRAG._matches_filter(metadata, cond)
+                for cond in where_filter["$and"]
+            )
+        for key, condition in where_filter.items():
+            if key.startswith("$"):
+                continue
+            if isinstance(condition, dict) and "$eq" in condition:
+                if metadata.get(key) != condition["$eq"]:
+                    return False
+            elif metadata.get(key) != condition:
+                return False
+        return True
+
+    # ========== 统计 & 管理 ==========
 
     def get_stats(self) -> Dict:
-        """获取知识库统计信息"""
+        """获取知识库统计信息（含 video_knowledge）"""
+        knowledge_count = self.vector_db._collection.count()
+        video_count = self.video_vector_db._collection.count()
+
         return {
-            "total_chunks": self.vector_db._collection.count(),
+            "knowledge_chunks": knowledge_count,
+            "video_chunks": video_count,
+            "total_chunks": knowledge_count + video_count,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
-            "top_k": self.top_k
+            "top_k": self.top_k,
+            "collections": {
+                "knowledge": {
+                    "name": "knowledge",
+                    "count": knowledge_count,
+                    "type": "local",
+                    "persist_dir": self.persist_dir,
+                },
+                "video_knowledge": {
+                    "name": "video_knowledge",
+                    "count": video_count,
+                    "type": "remote" if self.chroma_host else "local",
+                    "host": f"{self.chroma_host}:{self.chroma_port}"
+                    if self.chroma_host
+                    else "local",
+                },
+            },
         }
+
+    def get_collections(self) -> List[Dict]:
+        """获取所有 collection 信息"""
+        stats = self.get_stats()
+        return list(stats["collections"].values())
+
+    def clear_database(self, collection: str = "knowledge"):
+        """
+        清空指定的 collection
+
+        Args:
+            collection: "knowledge" 或 "video_knowledge"
+        """
+        if collection == "video_knowledge":
+            self.video_vector_db.delete_collection()
+            self._video_bm25 = None
+            # 重新初始化
+            self._init_vector_db()
+            print("视频知识库已清空")
+        else:
+            self.vector_db.delete_collection()
+            self._init_vector_db()
+            self._init_prompt()
+            print("知识库已清空")

@@ -6,7 +6,6 @@ langchain-openai
 chromadb
 openai
 python-dotenv
-markdown
-tiktoken
 fastapi
 uvicorn[standard]
+requests

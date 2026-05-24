@@ -1,28 +1,70 @@
+# RAG 服务 Docker Compose（Phase 2 增强版）
+# 包含：RAG 服务 + 独立 ChromaDB 容器（供 video_knowledge 使用）
+
 services:
+  # ChromaDB 独立容器（视频知识库专用）
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: rag-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # RAG 服务
   rag:
     build: .
     container_name: personal-knowledge-rag
     ports:
       - "8090:8090"
     environment:
+      # LLM 配置
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID}
-      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
-      - BASE_URL=${BASE_URL:-https://api.minimax.chat/v1}
+      - BASE_URL=${BASE_URL:-https://api.minimaxi.com/anthropic}
       - LLM_MODEL=${LLM_MODEL:-MiniMax-M2.7}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      # Embedding 配置
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
       - SILICONFLOW_BASE_URL=${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      # 知识库目录
+      - KNOWLEDGE_DIR=/app/knowledge
+      - VIDEO_KNOWLEDGE_DIR=/app/video_knowledge
+      - CHROMA_PERSIST_DIR=/app/chroma_db
+      # 远程 ChromaDB（视频知识库）
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      # 分块配置
       - CHUNK_SIZE=${CHUNK_SIZE:-500}
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-50}
       - TOP_K=${TOP_K:-5}
     volumes:
       - ./knowledge:/app/knowledge
+      - ./video_knowledge:/app/video_knowledge
       - ./chroma_db:/app/chroma_db
       - ./logs:/app/logs
+    depends_on:
+      chromadb:
+        condition: service_healthy
     restart: unless-stopped
+    mem_limit: 2g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/api/stats"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  chromadb-data:
