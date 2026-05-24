@@ -76,27 +76,36 @@ class ChromaWriter:
         """Initialize ChromaDB writer with SiliconFlow embeddings."""
 
         # Set up persist directory
+        # 默认使用 scripts/data/chromadb（与迁移脚本写入路径一致）
         if persist_directory is None:
             persist_directory = os.getenv(
                 "CHROMA_PERSIST_DIR",
-                str(Path(__file__).parent.parent / "data" / "chromadb"),
+                str(Path(__file__).parent / "data" / "chromadb"),
             )
 
         Path(persist_directory).mkdir(parents=True, exist_ok=True)
 
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=persist_directory,
-            settings=Settings(anonymized_telemetry=False),
-        )
+        # ChromaDB Rust 后端在 Windows 上不支持路径含非 ASCII 字符（如中文）
+        # 临时切换到脚本目录，使用相对路径初始化
+        _original_cwd = os.getcwd()
+        _scripts_dir = str(Path(__file__).parent)
+        try:
+            os.chdir(_scripts_dir)
+            _rel_path = os.path.relpath(persist_directory, _scripts_dir)
+            self.client = chromadb.PersistentClient(
+                path=_rel_path,
+                settings=Settings(anonymized_telemetry=False),
+            )
+        finally:
+            os.chdir(_original_cwd)
 
         # Initialize SiliconFlow embeddings
         self.embeddings = SiliconFlowEmbeddings()
 
-        # Get or create collection
+        # Get or create collection（metadata 需与迁移脚本一致）
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
-            metadata={"hnsw:space": "cosine"},
+            metadata={"description": "B站视频转写和精炼知识库"},
         )
 
         self.collection_name = collection_name
