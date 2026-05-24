@@ -1,10 +1,12 @@
-langchain
+# RAG 服务依赖
+# 注意：LLM 调用使用 anthropic SDK（MiniMax Anthropic 兼容接口），不使用 OpenAI
+
 langchain-text-splitters
 langchain-community
 langchain-chroma
-langchain-openai
+langchain-core
+anthropic
 chromadb
-openai
 python-dotenv
 fastapi
 uvicorn[standard]

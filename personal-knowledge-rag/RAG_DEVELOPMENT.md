@@ -128,7 +128,7 @@ pip install -r requirements.txt
 
 # 3. 配置API Key
 cp .env.example .env
-# 编辑 .env，填入你的 DASHSCOPE_API_KEY
+# 编辑 .env，填入你的 MINIMAX_API_KEY
 
 # 4. 放入你的markdown笔记
 # 把markdown文件放到 knowledge/ 目录

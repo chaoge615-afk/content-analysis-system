@@ -30,7 +30,7 @@ services:
       - "8090:8090"
     environment:
       # LLM 配置
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID}
       - BASE_URL=${BASE_URL:-https://api.minimaxi.com/anthropic}
       - LLM_MODEL=${LLM_MODEL:-MiniMax-M2.7}

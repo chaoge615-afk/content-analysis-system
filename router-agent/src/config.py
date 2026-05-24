@@ -13,7 +13,7 @@ PROJECT_DIR = Path(__file__).parent.parent
 load_dotenv(PROJECT_DIR / ".env")
 
 # ============ LLM 配置（MiniMax M2.7，用于意图分类和结果融合）============
-CHAT_API_KEY = os.getenv("CHAT_API_KEY", os.getenv("DASHSCOPE_API_KEY", ""))
+CHAT_API_KEY = os.getenv("CHAT_API_KEY", os.getenv("MINIMAX_API_KEY", ""))
 CHAT_API_URL = os.getenv("CHAT_API_URL", "https://api.minimaxi.com/anthropic")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "MiniMax-M2.7")
 

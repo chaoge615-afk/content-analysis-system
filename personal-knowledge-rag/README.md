@@ -29,7 +29,7 @@ cp .env.example .env
 编辑 `.env` 文件，填入你的 API Key:
 
 ```
-DASHSCOPE_API_KEY=你的-minimax-api-key
+MINIMAX_API_KEY=你的-minimax-api-key
 MINIMAX_GROUP_ID=你的-group-id
 SILICONFLOW_API_KEY=你的-siliconflow-api-key
 ```
@@ -112,7 +112,7 @@ docker build -t personal-knowledge-rag .
 
 # 运行容器
 docker run -d -p 8090:8090 \
-  -e DASHSCOPE_API_KEY=your_key \
+  -e MINIMAX_API_KEY=your_key \
   -e MINIMAX_GROUP_ID=your_group_id \
   -e SILICONFLOW_API_KEY=your_siliconflow_key \
   -v ./knowledge:/app/knowledge \
@@ -162,9 +162,8 @@ personal-knowledge-rag/
 - **LangChain**: RAG框架
 - **ChromaDB**: 本地向量数据库
 - **FastAPI**: Web服务
-- **Minimax**: 大语言模型
+- **Anthropic SDK**: 对接 MiniMax M2.7（Anthropic 兼容接口）
 - **SiliconFlow**: Embedding服务
-- **OpenAI SDK**: 兼容 Minimax API 接口
 
 ## 成本说明
 

@@ -10,12 +10,12 @@
 import os
 import re
 import requests
+import anthropic
 from typing import List, Dict, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_openai import ChatOpenAI
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_core.prompts import PromptTemplate
 from langchain_core.embeddings import Embeddings
@@ -28,7 +28,7 @@ from hybrid_search import BM25, HybridSearch
 load_dotenv()
 
 
-class MinimaxEmbeddings(Embeddings):
+class SiliconFlowEmbeddings(Embeddings):
     """SiliconFlow Embedding 适配（BAAI/bge-large-zh-v1.5）"""
 
     def __init__(
@@ -105,7 +105,7 @@ def extract_video_metadata(file_path: str) -> dict:
 class KnowledgeRAG:
     def __init__(self):
         # 从环境变量读取配置
-        self.api_key = os.getenv("DASHSCOPE_API_KEY")
+        self.api_key = os.getenv("MINIMAX_API_KEY")
         self.group_id = os.getenv("MINIMAX_GROUP_ID")
         self.llm_model = os.getenv("LLM_MODEL", "MiniMax-M2.7")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
@@ -145,22 +145,19 @@ class KnowledgeRAG:
         siliconflow_api_key = os.getenv("SILICONFLOW_API_KEY")
         if not siliconflow_api_key:
             raise ValueError("请在 .env 中配置 SILICONFLOW_API_KEY")
-        self.embeddings = MinimaxEmbeddings(
+        self.embeddings = SiliconFlowEmbeddings(
             api_key=siliconflow_api_key,
             model=self.embedding_model,
             base_url=self.embedding_base_url,
         )
 
     def _init_llm(self):
-        """初始化大语言模型"""
+        """初始化大语言模型（使用 anthropic SDK，对接 MiniMax Anthropic 兼容接口）"""
         if not self.api_key:
-            raise ValueError("请在 .env 中配置 DASHSCOPE_API_KEY（MiniMax API Key）")
-        self.llm = ChatOpenAI(
+            raise ValueError("请在 .env 中配置 MINIMAX_API_KEY（MiniMax API Key）")
+        self.llm = anthropic.Anthropic(
             api_key=self.api_key,
             base_url=self.base_url,
-            model=self.llm_model,
-            temperature=0.1,
-            extra_query={"GroupId": self.group_id} if self.group_id else {},
         )
 
     def _init_vector_db(self):
@@ -321,12 +318,12 @@ class KnowledgeRAG:
         chunks = text_splitter.split_documents(documents)
 
         # 为每个 chunk 附加 metadata
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks):
             source = chunk.metadata.get("source", "")
             video_meta = extract_video_metadata(source)
             chunk.metadata.update(video_meta)
             # 标记 chunk 在原文中的序号
-            chunk.metadata["chunk_index"] = chunks.index(chunk)
+            chunk.metadata["chunk_index"] = idx
 
         print(f"分割为 {len(chunks)} 个文本块（含 metadata）", flush=True)
 
@@ -415,12 +412,14 @@ class KnowledgeRAG:
 
         # 调用 LLM
         try:
-            result = self.llm.invoke(prompt_text)
-            if result is None:
-                return "LLM 返回了空结果，请检查 API 配置"
-
-            content = result.content if hasattr(result, "content") else str(result)
-            if content is None:
+            response = self.llm.messages.create(
+                model=self.llm_model,
+                max_tokens=2048,
+                temperature=0.1,
+                messages=[{"role": "user", "content": prompt_text}],
+            )
+            content = response.content[0].text if response.content else ""
+            if not content:
                 return "LLM 返回的内容为空，请检查 API 配置"
 
             # 过滤掉思考过程标签
@@ -467,12 +466,14 @@ class KnowledgeRAG:
 
         # 调用 LLM
         try:
-            result = self.llm.invoke(prompt_text)
-            if result is None:
-                return "LLM 返回了空结果，请检查 API 配置"
-
-            content = result.content if hasattr(result, "content") else str(result)
-            if content is None:
+            response = self.llm.messages.create(
+                model=self.llm_model,
+                max_tokens=2048,
+                temperature=0.1,
+                messages=[{"role": "user", "content": prompt_text}],
+            )
+            content = response.content[0].text if response.content else ""
+            if not content:
                 return "LLM 返回的内容为空，请检查 API 配置"
 
             content = re.sub(

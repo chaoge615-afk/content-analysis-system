@@ -1,5 +1,5 @@
 # 个人知识库RAG - Docker 构建文件（Phase 2 增强版）
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # 设置工作目录
 WORKDIR /app
