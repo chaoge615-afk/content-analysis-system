@@ -7,7 +7,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 - Python 3.11 / Node.js 24 / Git 2.53
 - LLM: MiniMax M2.7 (Anthropic-compatible API at api.minimaxi.com/anthropic)
 - Embedding: SiliconFlow API (BAAI/bge-large-zh-v1.5)
-- 精炼模型: deepseek-v4-pro (via private proxy at 140.143.147.125:3300)
+- 精炼模型: deepseek-v4-pro (via local proxy at 10.168.165.50:3300)
 - 存储: DuckDB (结构化) + ChromaDB (向量)
 - 部署: Docker Compose (NAS: Intel N150 + 8GB RAM, Local: RTX 4060 + 24GB)
 

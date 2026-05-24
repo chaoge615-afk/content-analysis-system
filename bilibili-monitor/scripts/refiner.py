@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API 配置
-API_URL = os.getenv('REFINE_API_URL', 'http://140.143.147.125:3300/v1/chat/completions')
+API_URL = os.getenv('REFINE_API_URL', 'http://10.168.165.50:3300/v1/chat/completions')
 API_KEY = os.getenv('REFINE_API_KEY', os.getenv('MINIMAX_API_KEY', ''))
 REFINE_MODEL = os.getenv('REFINE_MODEL', 'deepseek-v4-pro')
 
