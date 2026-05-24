@@ -1,38 +1,123 @@
-"""
-ChromaDB 写入模块
-存储视频转写文本和精炼摘要，支持语义检索
-"""
+"""ChromaDB writer for video transcripts and summaries."""
+
 import os
+import sys
 from pathlib import Path
-from typing import List, Dict, Optional
 import chromadb
 from chromadb.config import Settings
+from typing import List, Optional
+
+# Add project root to path for shared_config
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from shared_config import config
+
+
+class SiliconFlowEmbeddings:
+    """SiliconFlow Embeddings implementation using their API."""
+
+    def __init__(self):
+        self.api_key = config.embedding.api_key
+        self.base_url = config.embedding.base_url
+        self.model = config.embedding.model
+
+        if not self.api_key:
+            raise ValueError(
+                "SiliconFlow API key not configured. "
+                "Please set EMBEDDING_API_KEY in .env"
+            )
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        import requests
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        embeddings = []
+        # Process in batches to avoid hitting API limits
+        batch_size = 10
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            data = {
+                "model": self.model,
+                "input": batch,
+            }
+
+            response = requests.post(
+                f"{self.base_url}/embeddings",
+                headers=headers,
+                json=data,
+                timeout=30,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract embeddings from response
+            batch_embeddings = [item["embedding"] for item in result["data"]]
+            embeddings.extend(batch_embeddings)
+
+        return embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query."""
+        return self.embed_documents([text])[0]
 
 
 class ChromaWriter:
-    """ChromaDB 向量数据库写入器"""
+    """ChromaDB writer for video content."""
 
-    def __init__(self, persist_dir: str = None):
-        """
-        初始化 ChromaDB 客户端
-        persist_dir: 持久化目录，默认使用环境变量或 ./data/chromadb
-        """
-        if persist_dir is None:
-            persist_dir = os.getenv('CHROMADB_PATH', './data/chromadb')
+    def __init__(
+        self,
+        collection_name: str = "video_knowledge",
+        persist_directory: Optional[str] = None,
+    ):
+        """Initialize ChromaDB writer with SiliconFlow embeddings."""
 
-        self.persist_dir = Path(persist_dir)
-        self.persist_dir.mkdir(parents=True, exist_ok=True)
+        # Set up persist directory
+        if persist_directory is None:
+            persist_directory = os.getenv(
+                "CHROMA_PERSIST_DIR",
+                str(Path(__file__).parent.parent / "data" / "chromadb"),
+            )
 
-        # 初始化 ChromaDB 客户端
+        Path(persist_directory).mkdir(parents=True, exist_ok=True)
+
+        # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(
-            path=str(self.persist_dir),
-            settings=Settings(anonymized_telemetry=False)
+            path=persist_directory,
+            settings=Settings(anonymized_telemetry=False),
         )
 
-        # 获取或创建 video_knowledge collection
+        # Initialize SiliconFlow embeddings
+        self.embeddings = SiliconFlowEmbeddings()
+
+        # Get or create collection
         self.collection = self.client.get_or_create_collection(
-            name="video_knowledge",
-            metadata={"description": "B站视频转写和精炼知识库"}
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+        self.collection_name = collection_name
+        self.persist_directory = persist_directory
+
+    def add_documents(
+        self,
+        ids: List[str],
+        documents: List[str],
+        metadatas: Optional[List[dict]] = None,
+    ):
+        """Add documents to ChromaDB with embeddings."""
+        # Generate embeddings using SiliconFlow
+        embeddings = self.embeddings.embed_documents(documents)
+
+        # Add to collection
+        self.collection.add(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas,
+            embeddings=embeddings,
         )
 
     def add_video_content(
@@ -40,142 +125,95 @@ class ChromaWriter:
         bvid: str,
         up_name: str,
         title: str,
-        category: str,
-        publish_date: str,
         content: str,
-        content_type: str = "full",
-        chunk_index: int = 0
-    ) -> bool:
-        """
-        添加视频内容到 ChromaDB
-        bvid: 视频 BV 号
-        up_name: UP 主名称
-        title: 视频标题
-        category: 分类
-        publish_date: 发布日期 (YYYY-MM-DD)
-        content: 文本内容
-        content_type: "full" (转写全文) 或 "summary" (精炼摘要)
-        chunk_index: 分块序号（长文本需要分块时使用）
-        """
-        try:
-            # 生成唯一 ID
-            doc_id = f"{bvid}_{content_type}_{chunk_index}"
-
-            # 准备 metadata
-            metadata = {
-                "source": "bilibili",
-                "bvid": bvid,
-                "up_name": up_name,
-                "title": title,
-                "category": category,
-                "publish_date": publish_date,
-                "chunk_index": chunk_index,
-                "content_type": content_type,
-            }
-
-            # 添加到 collection
-            self.collection.add(
-                documents=[content],
-                metadatas=[metadata],
-                ids=[doc_id]
-            )
-            return True
-        except Exception as e:
-            print(f"添加视频内容失败 ({bvid}): {e}")
-            return False
-
-    def add_video_with_chunks(
-        self,
-        bvid: str,
-        up_name: str,
-        title: str,
-        category: str,
         publish_date: str,
-        full_text: Optional[str] = None,
-        summary: Optional[str] = None,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 200
-    ) -> int:
+        category: str = "",
+        tags: str = "",
+    ):
         """
-        添加视频内容（支持全文分块 + 摘要）
-        返回成功添加的文档数量
+        Add video content to ChromaDB.
+
+        Args:
+            bvid: Video BV ID
+            up_name: UP host name
+            title: Video title
+            content: Video transcript/summary content
+            publish_date: Publication date
+            category: Video category
+            tags: Video tags
         """
-        count = 0
+        # Generate unique ID
+        doc_id = f"{bvid}_{hash(content) % 10000:04d}"
 
-        # 1. 添加精炼摘要（如果有）
-        if summary and summary.strip():
-            if self.add_video_content(
-                bvid=bvid,
-                up_name=up_name,
-                title=title,
-                category=category,
-                publish_date=publish_date,
-                content=summary,
-                content_type="summary",
-                chunk_index=0
-            ):
-                count += 1
-
-        # 2. 添加转写全文（分块）
-        if full_text and full_text.strip():
-            chunks = self._split_text(full_text, chunk_size, chunk_overlap)
-            for idx, chunk in enumerate(chunks):
-                if self.add_video_content(
-                    bvid=bvid,
-                    up_name=up_name,
-                    title=title,
-                    category=category,
-                    publish_date=publish_date,
-                    content=chunk,
-                    content_type="full",
-                    chunk_index=idx
-                ):
-                    count += 1
-
-        return count
-
-    def _split_text(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
-        """
-        简单文本分块（按字符数）
-        后续可以改用更智能的分块策略（如按句子/段落）
-        """
-        chunks = []
-        start = 0
-        text_len = len(text)
-
-        while start < text_len:
-            end = start + chunk_size
-            chunk = text[start:end]
-            if chunk.strip():
-                chunks.append(chunk)
-            start = end - chunk_overlap
-
-        return chunks
-
-    def get_stats(self) -> Dict:
-        """获取 collection 统计信息"""
-        count = self.collection.count()
-        return {
-            "collection": "video_knowledge",
-            "total_documents": count,
-            "persist_dir": str(self.persist_dir)
+        # Prepare metadata
+        metadata = {
+            "bvid": bvid,
+            "up_name": up_name,
+            "title": title,
+            "publish_date": publish_date,
+            "category": category,
+            "tags": tags,
+            "content_type": "full" if len(content) > 500 else "summary",
         }
 
-    def delete_by_bvid(self, bvid: str) -> int:
+        # Add to collection
+        self.add_documents(
+            ids=[doc_id],
+            documents=[content],
+            metadatas=[metadata],
+        )
+
+    def search(
+        self,
+        query: str,
+        n_results: int = 5,
+        where: Optional[dict] = None,
+    ) -> dict:
         """
-        删除指定 bvid 的所有文档
-        返回删除的文档数量
+        Search for similar content.
+
+        Args:
+            query: Search query
+            n_results: Number of results to return
+            where: Metadata filter conditions
+
+        Returns:
+            Search results with documents, metadatas, and distances
         """
-        try:
-            # 查询该 bvid 的所有文档
-            results = self.collection.get(
-                where={"bvid": bvid}
-            )
-            if results and results['ids']:
-                count = len(results['ids'])
-                self.collection.delete(ids=results['ids'])
-                return count
-            return 0
-        except Exception as e:
-            print(f"删除 bvid={bvid} 失败: {e}")
-            return 0
+        # Generate query embedding
+        query_embedding = self.embeddings.embed_query(query)
+
+        # Build query parameters
+        query_params = {
+            "query_embeddings": [query_embedding],
+            "n_results": n_results,
+        }
+
+        if where:
+            query_params["where"] = where
+
+        # Execute search
+        results = self.collection.query(**query_params)
+
+        return results
+
+    def get_stats(self) -> dict:
+        """Get collection statistics."""
+        count = self.collection.count()
+        return {
+            "collection": self.collection_name,
+            "document_count": count,
+            "persist_directory": self.persist_directory,
+        }
+
+    def delete_by_bvid(self, bvid: str):
+        """Delete all documents for a specific video."""
+        # Get all documents with this bvid
+        results = self.collection.get(
+            where={"bvid": bvid},
+        )
+
+        if results["ids"]:
+            self.collection.delete(ids=results["ids"])
+            return len(results["ids"])
+        return 0

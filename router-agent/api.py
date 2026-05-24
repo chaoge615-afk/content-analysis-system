@@ -20,6 +20,7 @@ from src.config import PORT, HOST
 from src.intent_classifier import IntentClassifier
 from src.query_dispatcher import QueryDispatcher
 from src.result_merger import ResultMerger
+from src.query_logger import QueryLogger
 
 # ============ FastAPI 应用 ============
 app = FastAPI(title="Router Agent", version="1.0.0", description="智能内容分析系统统一入口")
@@ -36,6 +37,7 @@ app.add_middleware(
 classifier = IntentClassifier()
 dispatcher = QueryDispatcher()
 merger = ResultMerger()
+query_logger = QueryLogger()
 
 
 # ============ 请求/响应模型 ============
@@ -93,6 +95,9 @@ async def chat(req: ChatRequest):
         answer = sql_result.get("answer") or sql_result.get("error", "查询无结果")
         elapsed = time.time() - start_time
 
+        # 记录查询日志
+        query_logger.log(question, "structured", elapsed)
+
         return ChatResponse(
             answer=answer,
             route_type="structured",
@@ -106,6 +111,9 @@ async def chat(req: ChatRequest):
         rag_result = dispatcher.query_rag(question, filters=filters)
         answer = rag_result.get("answer", "未找到相关内容")
         elapsed = time.time() - start_time
+
+        # 记录查询日志
+        query_logger.log(question, "semantic", elapsed)
 
         return ChatResponse(
             answer=answer,
@@ -127,6 +135,9 @@ async def chat(req: ChatRequest):
         # LLM 融合结果
         answer = merger.merge(question, sql_result, rag_result)
         elapsed = time.time() - start_time
+
+        # 记录查询日志
+        query_logger.log(question, "hybrid", elapsed)
 
         return ChatResponse(
             answer=answer,
@@ -202,6 +213,30 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/query_stats")
+async def get_query_stats():
+    """查询统计（最近查询记录 + 总体统计）"""
+    try:
+        stats = query_logger.get_stats()
+        recent = query_logger.get_recent(limit=10)
+        return {
+            "success": True,
+            "stats": stats,
+            "recent_queries": [
+                {
+                    "id": r[0],
+                    "question": r[1],
+                    "route_type": r[2],
+                    "response_time": float(r[3]) if r[3] else 0,
+                    "created_at": str(r[4]),
+                }
+                for r in recent
+            ],
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 if __name__ == "__main__":
