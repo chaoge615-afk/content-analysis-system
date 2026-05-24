@@ -15,6 +15,7 @@ import argparse
 import time
 import subprocess
 from pathlib import Path
+from datetime import datetime
 
 # 添加脚本目录到路径
 SCRIPT_DIR = Path(__file__).parent
@@ -400,6 +401,44 @@ def main():
 
         transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, args.config, up_name)
         print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
+
+        # ── 精炼 + 入库（转写成功后） ──
+        if transcribe_ok > 0:
+            from post_transcribe import process_transcripts
+
+            # 准备视频元数据（用于入库时附加）
+            videos_info = {}
+            for v in new_videos:
+                pub_date = None
+                t = v.get('created') or v.get('pubdate') or 0
+                if t:
+                    pub_date = datetime.fromtimestamp(t).date()
+                videos_info[v['bvid']] = {
+                    'title': v['title'],
+                    'publish_date': pub_date,
+                    'category': v.get('tname', ''),
+                    'duration': v.get('duration', 0),
+                }
+
+            # 确定转写输出目录
+            trans_output = config.get('transcribe_output_dir', '')
+            if trans_output:
+                up_safe = up_name.replace('/', '_').replace('\\', '_')
+                scan_dir = os.path.join(os.path.expanduser(trans_output), up_safe)
+            else:
+                scan_dir = output_dir
+
+            print(f"\n  精炼 + 入库: 扫描 {scan_dir}")
+            try:
+                stats = process_transcripts(
+                    transcript_dir=scan_dir,
+                    up_name=up_name,
+                    up_uid=uid,
+                    videos_info=videos_info,
+                )
+                print(f"  入库完成: {stats['db_ok']} DuckDB, {stats['chroma_ok']} ChromaDB, {stats['refined']} 精炼")
+            except Exception as e:
+                print(f"  ⚠️ 精炼+入库异常: {e}")
 
     # ── QQ 通知（下载成功后） ──
     if newly_downloaded and not args.no_notify:
