@@ -228,6 +228,7 @@ def main():
     parser.add_argument('--force', action='store_true', help='强制重新下载已处理过的视频')
     parser.add_argument('--no-transcribe', action='store_true', help='跳过自动转写')
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
+    parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -308,6 +309,48 @@ def main():
 
     if args.dry_run:
         print("(--dry-run 模式，只显示不下载)")
+        sys.exit(0)
+
+    # ── metadata-only 模式：只写入 DuckDB，不下载不转写 ──
+    if args.metadata_only:
+        from db_writer import DBWriter
+        from datetime import datetime
+
+        print("\n(--metadata-only 模式，写入 DuckDB)")
+        with DBWriter() as db:
+            # 准备视频元数据
+            video_records = []
+            for v in new_videos:
+                pub_date = None
+                t = v.get('created') or v.get('pubdate') or 0
+                if t:
+                    pub_date = datetime.fromtimestamp(t).date()
+
+                video_records.append({
+                    'bvid': v['bvid'],
+                    'up_name': up_name,
+                    'up_uid': uid,
+                    'title': v['title'],
+                    'publish_date': pub_date,
+                    'category': v.get('tname', ''),
+                    'duration': v.get('duration', 0),
+                    'summary': None,
+                    'tags': v.get('tags', ''),
+                })
+
+            # 批量写入
+            success = db.insert_videos(video_records)
+            print(f"  写入视频元数据: {success}/{len(video_records)} 成功")
+
+            # 更新 UP 主信息
+            db.update_up_info(
+                uid=uid,
+                name=up_name,
+                total_videos=len(videos),
+                config_file=args.config,
+            )
+            print(f"  更新 UP 主信息: {up_name} (共 {len(videos)} 个视频)")
+
         sys.exit(0)
 
     # ── 下载 ──

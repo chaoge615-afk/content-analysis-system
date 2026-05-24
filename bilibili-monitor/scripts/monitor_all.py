@@ -21,7 +21,7 @@ def find_all_configs():
     return sorted(config_dir.glob("*.yaml"))
 
 
-def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool):
+def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False):
     """运行单个配置的监控，返回 (name, success, new_count, message, output)"""
     import yaml
     with open(config_path, encoding="utf-8") as f:
@@ -34,6 +34,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
         "--dry-run" if dry_run else "",
         "--no-transcribe" if no_transcribe else "",
         "--no-notify" if no_notify else "",
+        "--metadata-only" if metadata_only else "",
     ]
     cmd = [c for c in cmd if c]
 
@@ -85,7 +86,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
     return name, proc.returncode == 0, new_count, msg, output
 
 
-def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool):
+def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False):
     """
     批量运行一组配置，同步等待全部完成。
     返回 [(name, success, new_count, msg, output), ...]
@@ -93,7 +94,7 @@ def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool
     results = []
     for cfg in configs:
         print(f"\n处理: {cfg.name} ...", end=" ", flush=True)
-        r = run_single(cfg, dry_run, no_transcribe, no_notify)
+        r = run_single(cfg, dry_run, no_transcribe, no_notify, metadata_only)
         results.append(r)
         print("done")
     return results
@@ -104,6 +105,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='只查看新视频，不下载')
     parser.add_argument('--no-transcribe', action='store_true', help='跳过自动转写')
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
+    parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     parser.add_argument('--up', help='只运行指定UP主（配置名，如 an Jiajia）')
     args = parser.parse_args()
 
@@ -125,7 +127,7 @@ def main():
     print(f"{'='*60}")
 
     # ── 分批：下载阶段可以全量并行，转写阶段最多 MAX_CONCURRENT_TRANSCRIBE 个 UP 同时跑
-    if args.no_transcribe or args.dry_run:
+    if args.no_transcribe or args.dry_run or args.metadata_only:
         # 无转写场景：全部串行跑即可
         batched = [configs]
     else:
@@ -141,7 +143,7 @@ def main():
             print(f"\n{'='*60}")
             print(f"第 {batch_idx}/{len(batched)} 批: {[c.name for c in batch]}")
             print(f"{'='*60}")
-        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify)
+        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify, args.metadata_only)
         all_results.extend(batch_results)
 
         # 上一批与下一批之间稍作停顿，让 GPU 显存释放
