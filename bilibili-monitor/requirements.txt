@@ -9,5 +9,5 @@ python-dotenv>=1.0.0
 duckdb>=0.10.0
 chromadb>=0.4.22
 
-# GPU 加速（faster-whisper CUDA 模式需要）
-torch>=2.1.0
+# faster-whisper 使用 CTranslate2，不需要 PyTorch
+# GPU 模式（本地 RTX 4060）需要单独安装: pip install torch

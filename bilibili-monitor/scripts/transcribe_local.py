@@ -198,10 +198,13 @@ def process_directory(
                 except Exception as e:
                     print(f"    ⚠️ done_bvid 追加失败: {e}")
 
-            # 释放显存，避免碎片累积
+            # 释放显存，避免碎片累积（仅 GPU 模式且安装了 torch 时）
             if device == 'cuda':
-                import torch
-                torch.cuda.empty_cache()
+                try:
+                    import torch
+                    torch.cuda.empty_cache()
+                except ImportError:
+                    pass
 
             result.success += 1
 
