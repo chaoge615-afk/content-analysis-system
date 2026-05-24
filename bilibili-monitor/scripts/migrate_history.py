@@ -10,10 +10,8 @@ import os
 import re
 import sys
 import time
-import requests
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional
 
 # 添加 scripts 目录到路径
 SCRIPT_DIR = Path(__file__).parent
@@ -26,47 +24,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from db_writer import DBWriter
 from chroma_writer import ChromaWriter
 from refiner import refine_and_classify
-
-
-# ─── B站视频元数据 API ─────────────────────────────────────────
-
-def get_video_info_by_bvid(bvid: str) -> Optional[Dict]:
-    """
-    通过 BVID 获取视频元数据（无需 Cookie，公开 API）
-    返回: {title, owner_name, owner_mid, publish_date, duration, category, tags}
-    """
-    url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.bilibili.com/'
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if data['code'] != 0:
-            print(f"  ⚠️ B站 API 错误: {data.get('message', '未知')}")
-            return None
-
-        vdata = data['data']
-        pub_date = None
-        ctime = vdata.get('ctime', 0)
-        if ctime:
-            pub_date = datetime.fromtimestamp(ctime).date()
-
-        return {
-            'title': vdata.get('title', ''),
-            'owner_name': vdata.get('owner', {}).get('name', 'unknown'),
-            'owner_mid': str(vdata.get('owner', {}).get('mid', '')),
-            'publish_date': pub_date,
-            'duration': vdata.get('duration', 0),
-            'category': vdata.get('tname', ''),
-            'tags': vdata.get('tname', ''),
-        }
-    except Exception as e:
-        print(f"  ⚠️ B站 API 请求失败: {e}")
-        return None
+from bili_api import get_video_info_by_bvid
 
 
 # ─── 文件名解析 ─────────────────────────────────────────────────

@@ -47,19 +47,6 @@ class TranscribeResult:
         return self.found > 0
 
 
-def probe_duration(audio_path: Path) -> float:
-    import subprocess
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", str(audio_path)],
-        capture_output=True, text=True, timeout=10
-    )
-    try:
-        return float(result.stdout.strip())
-    except Exception:
-        return 0.0
-
-
 def format_duration(seconds: float) -> str:
     m = int(seconds) // 60
     s = int(seconds) % 60

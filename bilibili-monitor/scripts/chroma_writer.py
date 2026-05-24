@@ -172,6 +172,73 @@ class ChromaWriter:
             metadatas=[metadata],
         )
 
+    def add_video_with_chunks(
+        self,
+        bvid: str,
+        up_name: str,
+        title: str,
+        category: str,
+        publish_date: str,
+        full_text: Optional[str] = None,
+        summary: Optional[str] = None,
+        chunk_size: int = 500,
+    ) -> int:
+        """
+        将视频内容分块写入 ChromaDB（全文分块 + 摘要单独存储）
+
+        Args:
+            bvid: 视频 BV ID
+            up_name: UP 主名称
+            title: 视频标题
+            category: 视频分类
+            publish_date: 发布日期
+            full_text: 完整转写文本（可选，会按 chunk_size 分块）
+            summary: 精炼摘要（可选，单独存储）
+            chunk_size: 每块最大字符数
+
+        Returns:
+            写入的文档数量
+        """
+        ids = []
+        documents = []
+        metadatas = []
+
+        base_meta = {
+            "bvid": bvid,
+            "up_name": up_name,
+            "title": title,
+            "publish_date": publish_date or "",
+            "category": category or "",
+        }
+
+        # 全文分块
+        if full_text and full_text.strip():
+            text = full_text.strip()
+            chunks = []
+            for i in range(0, len(text), chunk_size):
+                chunk = text[i:i + chunk_size].strip()
+                if chunk:
+                    chunks.append(chunk)
+
+            for idx, chunk in enumerate(chunks):
+                ids.append(f"{bvid}_chunk_{idx}")
+                documents.append(chunk)
+                meta = {**base_meta, "content_type": "chunk", "chunk_index": idx}
+                metadatas.append(meta)
+
+        # 摘要单独存储
+        if summary and summary.strip():
+            ids.append(f"{bvid}_summary")
+            documents.append(summary.strip())
+            meta = {**base_meta, "content_type": "summary"}
+            metadatas.append(meta)
+
+        if not documents:
+            return 0
+
+        self.add_documents(ids=ids, documents=documents, metadatas=metadatas)
+        return len(documents)
+
     def search(
         self,
         query: str,

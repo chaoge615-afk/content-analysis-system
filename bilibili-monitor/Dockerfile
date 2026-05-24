@@ -27,9 +27,7 @@ ENV WHISPER_DEVICE=cpu
 ENV WHISPER_MODEL=small
 ENV COMPUTE_TYPE=int8
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+# 批量任务容器，无需 HEALTHCHECK（运行完成即退出）
 
 # 默认命令
 CMD ["python", "scripts/monitor_all.py"]
