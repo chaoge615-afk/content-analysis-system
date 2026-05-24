@@ -8,7 +8,7 @@ from chromadb.config import Settings
 from typing import List, Optional
 
 # Add project root to path for shared modules
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared_embeddings import SiliconFlowEmbeddings
 
 
@@ -20,34 +20,54 @@ class ChromaWriter:
         collection_name: str = "video_knowledge",
         persist_directory: Optional[str] = None,
     ):
-        """Initialize ChromaDB writer with SiliconFlow embeddings."""
-
-        # Set up persist directory
-        # 默认使用 bilibili-monitor/data/chromadb（与 content.db 同级）
-        if persist_directory is None:
-            persist_directory = os.getenv(
-                "CHROMA_PERSIST_DIR",
-                str(Path(__file__).parent.parent / "data" / "chromadb"),
-            )
-
-        Path(persist_directory).mkdir(parents=True, exist_ok=True)
-
-        # ChromaDB Rust 后端在 Windows 上不支持路径含非 ASCII 字符（如中文）
-        # 临时切换到 bilibili-monitor 目录，使用相对路径初始化
-        _original_cwd = os.getcwd()
-        _project_dir = str(Path(__file__).parent.parent)
-        try:
-            os.chdir(_project_dir)
-            _rel_path = os.path.relpath(persist_directory, _project_dir)
-            self.client = chromadb.PersistentClient(
-                path=_rel_path,
-                settings=Settings(anonymized_telemetry=False),
-            )
-        finally:
-            os.chdir(_original_cwd)
+        """
+        Initialize ChromaDB writer with SiliconFlow embeddings.
+        支持本地持久化和远程 ChromaDB 容器两种模式。
+        设置 CHROMA_HOST 环境变量使用远程模式（与 RAG 服务共享）。
+        """
 
         # Initialize SiliconFlow embeddings
         self.embeddings = SiliconFlowEmbeddings()
+
+        # 检查是否使用远程 ChromaDB
+        chroma_host = os.getenv("CHROMA_HOST")
+        chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+
+        if chroma_host:
+            # 远程 ChromaDB 容器（与 RAG 服务共享）
+            self.client = chromadb.HttpClient(
+                host=chroma_host,
+                port=chroma_port,
+                settings=Settings(anonymized_telemetry=False),
+            )
+            self.persist_directory = f"remote://{chroma_host}:{chroma_port}"
+            print(f"[ChromaWriter] 连接远程 ChromaDB: {chroma_host}:{chroma_port}")
+        else:
+            # 本地持久化（开发模式）
+            if persist_directory is None:
+                persist_directory = os.getenv(
+                    "CHROMA_PERSIST_DIR",
+                    str(Path(__file__).parent.parent / "data" / "chromadb"),
+                )
+
+            Path(persist_directory).mkdir(parents=True, exist_ok=True)
+
+            # ChromaDB Rust 后端在 Windows 上不支持路径含非 ASCII 字符（如中文）
+            # 临时切换到 bilibili-monitor 目录，使用相对路径初始化
+            _original_cwd = os.getcwd()
+            _project_dir = str(Path(__file__).parent.parent)
+            try:
+                os.chdir(_project_dir)
+                _rel_path = os.path.relpath(persist_directory, _project_dir)
+                self.client = chromadb.PersistentClient(
+                    path=_rel_path,
+                    settings=Settings(anonymized_telemetry=False),
+                )
+            finally:
+                os.chdir(_original_cwd)
+
+            self.persist_directory = persist_directory
+            print(f"[ChromaWriter] 使用本地持久化: {persist_directory}")
 
         # Get or create collection（metadata 需与迁移脚本一致）
         self.collection = self.client.get_or_create_collection(
@@ -173,12 +193,24 @@ class ChromaWriter:
                 meta = {**base_meta, "content_type": "chunk", "chunk_index": idx}
                 metadatas.append(meta)
 
-        # 摘要单独存储
+        # 摘要单独存储（过长时分块）
         if summary and summary.strip():
-            ids.append(f"{bvid}_summary")
-            documents.append(summary.strip())
-            meta = {**base_meta, "content_type": "summary"}
-            metadatas.append(meta)
+            text = summary.strip()
+            if len(text) <= chunk_size:
+                ids.append(f"{bvid}_summary")
+                documents.append(text)
+                meta = {**base_meta, "content_type": "summary"}
+                metadatas.append(meta)
+            else:
+                # 摘要过长，分块存储
+                for idx in range(0, len(text), chunk_size):
+                    chunk = text[idx:idx + chunk_size].strip()
+                    if chunk:
+                        chunk_idx = idx // chunk_size
+                        ids.append(f"{bvid}_summary_{chunk_idx}")
+                        documents.append(chunk)
+                        meta = {**base_meta, "content_type": "summary", "chunk_index": chunk_idx}
+                        metadatas.append(meta)
 
         if not documents:
             return 0

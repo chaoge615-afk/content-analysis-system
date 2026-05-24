@@ -9,6 +9,7 @@
 import os
 import re
 import anthropic
+import openai
 from typing import List, Dict, Optional
 from pathlib import Path
 from dotenv import load_dotenv
@@ -92,6 +93,15 @@ class KnowledgeRAG:
             "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"
         )
 
+        # LLM 提供者选择：minimax（默认）或 deepseek
+        self.llm_provider = os.getenv("LLM_PROVIDER", "minimax")
+        if self.llm_provider == "deepseek":
+            self.deepseek_api_key = os.getenv("REFINE_API_KEY", "")
+            self.deepseek_base_url = os.getenv("REFINE_API_URL", "http://10.168.165.50:3300/v1")
+            # REFINE_API_URL 指向 /v1/chat/completions，OpenAI SDK 需要 /v1
+            if self.deepseek_base_url.endswith("/chat/completions"):
+                self.deepseek_base_url = self.deepseek_base_url.rsplit("/chat/completions", 1)[0]
+
         # 混合检索
         self._hybrid_search = HybridSearch(rank_cap=3)
         self._video_bm25: Optional[BM25] = None
@@ -114,13 +124,23 @@ class KnowledgeRAG:
         )
 
     def _init_llm(self):
-        """初始化大语言模型（使用 anthropic SDK，对接 MiniMax Anthropic 兼容接口）"""
-        if not self.api_key:
-            raise ValueError("请在 .env 中配置 MINIMAX_API_KEY（MiniMax API Key）")
-        self.llm = anthropic.Anthropic(
-            api_key=self.api_key,
-            base_url=self.base_url,
-        )
+        """初始化大语言模型（支持 MiniMax/anthropic 和 DeepSeek/openai 两种接口）"""
+        if self.llm_provider == "deepseek":
+            if not self.deepseek_api_key:
+                raise ValueError("请在 .env 中配置 REFINE_API_KEY（DeepSeek API Key）")
+            self.llm = openai.OpenAI(
+                api_key=self.deepseek_api_key,
+                base_url=self.deepseek_base_url,
+            )
+            print(f"[RAG] LLM 使用 DeepSeek: {self.deepseek_base_url} ({self.llm_model})")
+        else:
+            if not self.api_key:
+                raise ValueError("请在 .env 中配置 MINIMAX_API_KEY（MiniMax API Key）")
+            self.llm = anthropic.Anthropic(
+                api_key=self.api_key,
+                base_url=self.base_url,
+            )
+            print(f"[RAG] LLM 使用 MiniMax: {self.base_url} ({self.llm_model})")
 
     def _init_vector_db(self):
         """初始化 ChromaDB 向量数据库（video_knowledge collection）"""
@@ -302,13 +322,29 @@ class KnowledgeRAG:
 
         # 调用 LLM
         try:
-            response = self.llm.messages.create(
-                model=self.llm_model,
-                max_tokens=2048,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt_text}],
-            )
-            content = response.content[0].text if response.content else ""
+            if self.llm_provider == "deepseek":
+                # DeepSeek（OpenAI SDK）
+                response = self.llm.chat.completions.create(
+                    model=self.llm_model,
+                    max_tokens=2048,
+                    temperature=0.1,
+                    messages=[{"role": "user", "content": prompt_text}],
+                )
+                content = response.choices[0].message.content if response.choices else ""
+            else:
+                # MiniMax（Anthropic SDK）
+                response = self.llm.messages.create(
+                    model=self.llm_model,
+                    max_tokens=2048,
+                    temperature=0.1,
+                    messages=[{"role": "user", "content": prompt_text}],
+                )
+                # 提取文本内容（过滤掉 ThinkingBlock 等非文本块）
+                text_parts = []
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        text_parts.append(block.text)
+                content = "\n".join(text_parts) if text_parts else ""
             if not content:
                 return "LLM 返回的内容为空，请检查 API 配置"
 

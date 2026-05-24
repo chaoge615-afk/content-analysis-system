@@ -18,7 +18,7 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 # 添加根目录（加载 shared_config）
-ROOT_DIR = SCRIPT_DIR.parent.parent
+ROOT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from db_writer import DBWriter
@@ -186,17 +186,20 @@ def migrate_refined(
             pass  # 静默失败，避免刷屏
 
         # 写入 ChromaDB（精炼内容作为 summary，无全文）
-        chroma_count = chroma.add_video_with_chunks(
-            bvid=bvid,
-            up_name=up_name,
-            title=api_title,
-            category=category,
-            publish_date=str(pub_date) if pub_date else '',
-            full_text=None,
-            summary=refined_text,
-        )
-        if chroma_count > 0:
-            stats['chroma_ok'] += 1
+        try:
+            chroma_count = chroma.add_video_with_chunks(
+                bvid=bvid,
+                up_name=up_name,
+                title=api_title,
+                category=category,
+                publish_date=str(pub_date) if pub_date else '',
+                full_text=None,
+                summary=refined_text,
+            )
+            if chroma_count > 0:
+                stats['chroma_ok'] += 1
+        except Exception as e:
+            print(f"  ⚠️ ChromaDB 写入失败: {e}")
 
         # 每 100 个打印一次进度
         if i % 100 == 0:

@@ -1,11 +1,12 @@
 # RAG 服务依赖
-# 注意：LLM 调用使用 anthropic SDK（MiniMax Anthropic 兼容接口），不使用 OpenAI
+# LLM 调用支持 anthropic SDK（MiniMax）和 openai SDK（DeepSeek）
 
 langchain-text-splitters
 langchain-community
 langchain-chroma
 langchain-core
 anthropic
+openai
 chromadb
 python-dotenv
 fastapi

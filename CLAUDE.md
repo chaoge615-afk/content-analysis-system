@@ -27,6 +27,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - apt: 阿里云 Debian 镜像 (`mirrors.aliyun.com`)
   - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
   - npm: 淘宝镜像 (`registry.npmmirror.com`)
+- **每次 Docker 镜像重建后，清理构建缓存**：`docker builder prune -a -f`（释放磁盘空间）
 - **每完成一个任务点，立即更新 `开发计划.md` 中的 checkbox，然后 git commit 并 push**
 
 ## 关键文件
