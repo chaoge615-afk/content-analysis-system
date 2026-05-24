@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+docker-data/
+
+# Large data files (>50MB)
+*.tar.gz
+*.zip
+*.7z
+*.sql
+.search_index.json
+search_index.json
+
+# ChromaDB local data
+chroma_db/
+chromadb-data/
+
+# DuckDB local data
+*.db
+*.db.wal
+
+# Logs
+logs/
+*.log
+
+# Claude Code
+.claude/
+
+# Sub-project git backups
+.git.bak/

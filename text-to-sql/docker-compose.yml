@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: text-to-sql-app
+    environment:
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimaxi.com/anthropic}
+      - DATABASE_PATH=/app/data/nutrition.db
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8010:8010"
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 2G

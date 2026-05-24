@@ -1,0 +1,16 @@
+# B站UP主监控配置
+name: "是你的安佳佳呀"
+uid: "410110370"
+cookie_file: "~/.bilibili/cookie.txt"
+download_root: "~/B站监控"
+
+# QQ 通知（填 openid，私聊直接发给你）
+notify_target: "qq:65091C38C651B44BA071725FDF78A800"
+
+# Whisper 转写设置
+whisper_model: "medium"
+whisper_device: "cuda"
+
+# bilibili-transcribe 路径（一般不改）
+transcribe_skill_dir: "~/.hermes/skills/bilibili-transcribe"
+transcribe_output_dir: "/mnt/e/情感素材库"

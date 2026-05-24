@@ -1,0 +1,28 @@
+services:
+  rag:
+    build: .
+    container_name: personal-knowledge-rag
+    ports:
+      - "8090:8090"
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - BASE_URL=${BASE_URL:-https://api.minimax.chat/v1}
+      - LLM_MODEL=${LLM_MODEL:-MiniMax-M2.7}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      - SILICONFLOW_BASE_URL=${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
+      - CHUNK_SIZE=${CHUNK_SIZE:-500}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-50}
+      - TOP_K=${TOP_K:-5}
+    volumes:
+      - ./knowledge:/app/knowledge
+      - ./chroma_db:/app/chroma_db
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
