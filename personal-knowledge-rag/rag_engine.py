@@ -1,8 +1,7 @@
 """
-个人知识库RAG引擎（Phase 2 增强版）
+视频知识库RAG引擎
 核心功能：
-  - 双 collection：knowledge（markdown 个人知识）+ video_knowledge（B站视频精炼）
-  - 支持 .md 和 .txt 文件加载
+  - video_knowledge collection（B站视频精炼）
   - metadata 过滤检索（按 UP主、分类、日期等）
   - BM25 + 向量混合检索
 """
@@ -73,7 +72,6 @@ class KnowledgeRAG:
         self.group_id = os.getenv("MINIMAX_GROUP_ID")
         self.llm_model = os.getenv("LLM_MODEL", "MiniMax-M2.7")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
-        self.knowledge_dir = os.getenv("KNOWLEDGE_DIR", "./knowledge")
         self.persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
         self.chunk_size = int(os.getenv("CHUNK_SIZE", "500"))
         self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "50"))
@@ -125,16 +123,7 @@ class KnowledgeRAG:
         )
 
     def _init_vector_db(self):
-        """初始化 ChromaDB 向量数据库（双 collection）"""
-        # Collection 1: knowledge（本地持久化，向后兼容）
-        os.makedirs(self.knowledge_dir, exist_ok=True)
-        self.vector_db = Chroma(
-            collection_name="knowledge",
-            persist_directory=self.persist_dir,
-            embedding_function=self.embeddings,
-        )
-
-        # Collection 2: video_knowledge
+        """初始化 ChromaDB 向量数据库（video_knowledge collection）"""
         if self.chroma_host:
             # 远程 ChromaDB 容器
             import chromadb
@@ -178,69 +167,6 @@ class KnowledgeRAG:
         )
 
     # ========== 知识库加载 ==========
-
-    def load_knowledge(self) -> int:
-        """
-        加载 knowledge 目录下所有 markdown 和 txt 文件，更新到向量库
-        """
-        # 加载 markdown 文件
-        md_loader = DirectoryLoader(
-            self.knowledge_dir,
-            glob="**/*.md",
-            loader_cls=TextLoader,
-            loader_kwargs={"encoding": "utf-8"},
-        )
-
-        # 同时加载 txt 文件
-        txt_loader = DirectoryLoader(
-            self.knowledge_dir,
-            glob="**/*.txt",
-            loader_cls=TextLoader,
-            loader_kwargs={"encoding": "utf-8"},
-        )
-
-        documents = []
-        try:
-            documents.extend(md_loader.load())
-        except Exception:
-            pass
-        try:
-            documents.extend(txt_loader.load())
-        except Exception:
-            pass
-
-        if not documents:
-            print(f"在 {self.knowledge_dir} 目录下没有找到任何文件", flush=True)
-            return 0
-
-        print(f"找到 {len(documents)} 个文件", flush=True)
-
-        # 文本分块
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,
-            separators=["\n\n", "\n", "。", "，", " ", ""],
-            keep_separator=True,
-        )
-
-        chunks = text_splitter.split_documents(documents)
-        print(f"分割为 {len(chunks)} 个文本块", flush=True)
-
-        # 分批添加到向量库，避免请求过大导致 413 错误
-        batch_size = 20
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i : i + batch_size]
-            self.vector_db.add_documents(batch)
-            print(
-                f"已处理 {min(i + batch_size, len(chunks))}/{len(chunks)} 个文本块",
-                flush=True,
-            )
-
-        print(
-            f"知识库更新完成，当前总共有 {self.vector_db._collection.count()} 个文档块",
-            flush=True,
-        )
-        return len(chunks)
 
     def load_video_knowledge(self, source_dir: str = None) -> int:
         """
@@ -397,55 +323,18 @@ class KnowledgeRAG:
     def ask(
         self,
         question: str,
-        collection: str = "knowledge",
+        collection: str = "video_knowledge",
         metadata_filter: dict = None,
     ) -> str:
         """
-        通用问答方法（向后兼容）
+        通用问答方法
 
         Args:
             question: 用户问题
-            collection: "knowledge" 或 "video_knowledge"
-            metadata_filter: 过滤条件（仅 video_knowledge 有效）
+            collection: 目前仅支持 "video_knowledge"
+            metadata_filter: 过滤条件
         """
-        if collection == "video_knowledge":
-            return self.ask_video(question, metadata_filter=metadata_filter)
-
-        # 原有 knowledge 逻辑
-        if self.vector_db._collection.count() == 0:
-            return "知识库还是空的，请先加载文件"
-
-        # 检索相关文档
-        retriever = self.vector_db.as_retriever(search_kwargs={"k": self.top_k})
-        docs = retriever.invoke(question)
-
-        if not docs:
-            return "没有找到相关文档，请尝试其他问题"
-
-        # 拼接上下文
-        context = "\n\n".join([doc.page_content for doc in docs])
-
-        # 生成 prompt
-        prompt_text = self.prompt.format(context=context, question=question)
-
-        # 调用 LLM
-        try:
-            response = self.llm.messages.create(
-                model=self.llm_model,
-                max_tokens=2048,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt_text}],
-            )
-            content = response.content[0].text if response.content else ""
-            if not content:
-                return "LLM 返回的内容为空，请检查 API 配置"
-
-            content = re.sub(
-                r"<think>.*?</think>", "", content, flags=re.DOTALL
-            ).strip()
-            return content
-        except Exception as e:
-            return f"调用 LLM 时出错: {str(e)}"
+        return self.ask_video(question, metadata_filter=metadata_filter)
 
     def _hybrid_search_video(
         self, question: str, where_filter: dict = None
@@ -558,24 +447,16 @@ class KnowledgeRAG:
     # ========== 统计 & 管理 ==========
 
     def get_stats(self) -> Dict:
-        """获取知识库统计信息（含 video_knowledge）"""
-        knowledge_count = self.vector_db._collection.count()
+        """获取知识库统计信息"""
         video_count = self.video_vector_db._collection.count()
 
         return {
-            "knowledge_chunks": knowledge_count,
             "video_chunks": video_count,
-            "total_chunks": knowledge_count + video_count,
+            "total_chunks": video_count,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
             "top_k": self.top_k,
             "collections": {
-                "knowledge": {
-                    "name": "knowledge",
-                    "count": knowledge_count,
-                    "type": "local",
-                    "persist_dir": self.persist_dir,
-                },
                 "video_knowledge": {
                     "name": "video_knowledge",
                     "count": video_count,
@@ -592,21 +473,15 @@ class KnowledgeRAG:
         stats = self.get_stats()
         return list(stats["collections"].values())
 
-    def clear_database(self, collection: str = "knowledge"):
+    def clear_database(self, collection: str = "video_knowledge"):
         """
         清空指定的 collection
 
         Args:
-            collection: "knowledge" 或 "video_knowledge"
+            collection: "video_knowledge"
         """
-        if collection == "video_knowledge":
-            self.video_vector_db.delete_collection()
-            self._video_bm25 = None
-            # 重新初始化
-            self._init_vector_db()
-            print("视频知识库已清空")
-        else:
-            self.vector_db.delete_collection()
-            self._init_vector_db()
-            self._init_prompt()
-            print("知识库已清空")
+        self.video_vector_db.delete_collection()
+        self._video_bm25 = None
+        # 重新初始化
+        self._init_vector_db()
+        print("视频知识库已清空")

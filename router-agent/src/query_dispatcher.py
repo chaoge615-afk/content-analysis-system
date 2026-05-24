@@ -99,23 +99,6 @@ class QueryDispatcher:
                 "error": str(e),
             }
 
-    def query_rag_knowledge(self, question: str) -> dict:
-        """
-        发送到 RAG 服务（knowledge collection - markdown 个人知识）
-        """
-        try:
-            resp = requests.post(
-                f"{self.rag_url}/api/ask",
-                json={"question": question},
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except requests.ConnectionError:
-            return {"answer": "RAG 服务不可用", "error": "RAG 服务不可用"}
-        except Exception as e:
-            return {"answer": f"RAG 查询失败: {str(e)}", "error": str(e)}
-
     def check_sql_health(self) -> bool:
         """检查 Text-to-SQL 服务是否可用"""
         try:

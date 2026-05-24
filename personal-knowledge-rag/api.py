@@ -1,6 +1,6 @@
 """
-个人知识库RAG - FastAPI 后端（Phase 2 增强版）
-提供 Web 问答接口 + 视频知识库接口
+视频知识库RAG - FastAPI 后端
+提供视频知识库问答接口
 """
 
 import warnings
@@ -16,7 +16,7 @@ import os
 from rag_engine import KnowledgeRAG
 
 # 初始化 FastAPI 应用
-app = FastAPI(title="个人知识库问答系统", version="2.0.0")
+app = FastAPI(title="视频知识库问答系统", version="2.0.0")
 
 # CORS middleware（供 Router Agent 跨服务调用）
 app.add_middleware(
@@ -44,10 +44,6 @@ def get_rag() -> KnowledgeRAG:
 
 # ========== 请求/响应模型 ==========
 
-class AskRequest(BaseModel):
-    question: str
-
-
 class AskVideoRequest(BaseModel):
     """视频知识库问答请求"""
     question: str
@@ -56,9 +52,9 @@ class AskVideoRequest(BaseModel):
 
 
 class AskGenericRequest(BaseModel):
-    """通用问答请求（可指定 collection）"""
+    """通用问答请求"""
     question: str
-    collection: str = "knowledge"  # "knowledge" 或 "video_knowledge"
+    collection: str = "video_knowledge"
     filters: Optional[dict] = None
 
 
@@ -85,20 +81,6 @@ async def index():
 
 
 # ========== 问答接口 ==========
-
-@app.post("/api/ask")
-async def ask_question(req: AskRequest):
-    """处理问答请求（默认 knowledge collection）"""
-    if not req.question or not req.question.strip():
-        return {"answer": "请输入问题"}
-
-    try:
-        rag = get_rag()
-        answer = rag.ask(req.question)
-        return {"answer": answer}
-    except Exception as e:
-        return {"answer": f"处理问题时出错: {str(e)}"}
-
 
 @app.post("/api/ask_video")
 async def ask_video(req: AskVideoRequest):
@@ -180,17 +162,6 @@ async def get_collections():
         return {"success": False, "error": str(e), "collections": []}
 
 
-@app.post("/api/load")
-async def load_knowledge():
-    """触发知识库加载（knowledge collection）"""
-    try:
-        rag = get_rag()
-        count = rag.load_knowledge()
-        return {"success": True, "chunks_loaded": count}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
 @app.post("/api/load_video")
 async def load_video_knowledge():
     """触发视频知识库加载（video_knowledge collection）"""
@@ -198,17 +169,6 @@ async def load_video_knowledge():
         rag = get_rag()
         count = rag.load_video_knowledge()
         return {"success": True, "chunks_loaded": count}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@app.post("/api/clear")
-async def clear_knowledge():
-    """清空知识库"""
-    try:
-        rag = get_rag()
-        rag.clear_database("knowledge")
-        return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

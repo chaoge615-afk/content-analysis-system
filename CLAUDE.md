@@ -13,7 +13,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 
 ## 子项目
 - `bilibili-monitor/` - B站监控 (Hermes Skill, 待独立化改造)
-- `personal-knowledge-rag/` - RAG问答 (FastAPI:8090, LangChain)
+- `personal-knowledge-rag/` - 视频知识库RAG问答 (FastAPI:8090, LangChain, BM25+向量混合检索)
 - `text-to-sql/` - Text-to-SQL (FastAPI:8010 + React前端:3000, 4-Agent pipeline)
 - `relationship-analysis/` - 情感分析技能 (1413个精炼文件, BM25+向量检索)
 
@@ -23,6 +23,10 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 - Git提交用中文说明
 - 代码注释用中文
 - NAS内存限制8GB, 各服务需设mem_limit
+- **Docker 构建必须使用国内镜像加速**：
+  - apt: 阿里云 Debian 镜像 (`mirrors.aliyun.com`)
+  - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
+  - npm: 淘宝镜像 (`registry.npmmirror.com`)
 - **每完成一个任务点，立即更新 `开发计划.md` 中的 checkbox，然后 git commit 并 push**
 
 ## 关键文件
@@ -32,7 +36,6 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 
 ## 注意事项
 - text-to-sql 声称用CrewAI但实际是纯Python手写pipeline
-- RAG项目无metadata过滤功能, 需要新增
 - bilibili-monitor 依赖Hermes平台, 需改造为独立服务
 - 已有1413个精炼txt文件在 relationship-analysis/references/情感素材库/
 - Docker Desktop 路径: /c/Users/25022/AppData/Local/Programs/DockerDesktop/resources/bin
