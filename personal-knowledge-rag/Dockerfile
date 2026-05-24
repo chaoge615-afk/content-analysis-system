@@ -1,4 +1,5 @@
 # 个人知识库RAG - Docker 构建文件（Phase 2 增强版）
+# 构建上下文: 根目录（需要访问 shared_config.py 和 shared_embeddings.py）
 FROM python:3.11-slim
 
 # 设置工作目录
@@ -9,19 +10,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY requirements.txt .
+# 复制共享模块（根目录）
+COPY shared_config.py shared_embeddings.py ./
+
+# 复制 RAG 项目依赖文件
+COPY personal-knowledge-rag/requirements.txt .
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码
-COPY rag_engine.py .
-COPY hybrid_search.py .
-COPY api.py .
-COPY main.py .
-COPY load_cli.py .
-COPY templates/ ./templates/
+# 复制 RAG 项目代码
+COPY personal-knowledge-rag/rag_engine.py .
+COPY personal-knowledge-rag/hybrid_search.py .
+COPY personal-knowledge-rag/api.py .
+COPY personal-knowledge-rag/main.py .
+COPY personal-knowledge-rag/load_cli.py .
+COPY personal-knowledge-rag/templates/ ./templates/
 
 # 创建空数据目录（供运行时挂载）
 RUN mkdir -p /app/knowledge /app/video_knowledge /app/chroma_db /app/logs

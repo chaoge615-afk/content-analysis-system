@@ -53,8 +53,15 @@ def format_duration(seconds: float) -> str:
     return f"{m:02d}m{s:02d}s"
 
 
-def transcribe_m4a(audio_path: Path, model_size: str, device: str, min_duration: int = 60):
-    """对单个 m4a 转写，返回 (纯文本, model) 或 (None, None) 如果时长不足"""
+def transcribe_m4a(
+    audio_path: Path,
+    model: WhisperModel,
+    min_duration: int = 60,
+) -> Optional[str]:
+    """
+    对单个 m4a 转写，返回纯文本；时长不足或失败返回 None
+    model: 外部传入的 WhisperModel 实例（复用以避免重复加载）
+    """
     import subprocess as _sp
 
     # 先探测时长，不足跳过
@@ -70,13 +77,9 @@ def transcribe_m4a(audio_path: Path, model_size: str, device: str, min_duration:
 
     if duration > 0 and duration < min_duration:
         print(f"    ⏭️ 时长 {format_duration(duration)} < {min_duration}s，跳过")
-        return None, None
+        return None
 
     print(f"    时长: {format_duration(duration)}")
-
-    # faster-whisper 配置
-    compute_type = "float16" if device == "cuda" else "int8"
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
     # 转写
     segments, info = model.transcribe(str(audio_path), language="zh")
@@ -87,8 +90,7 @@ def transcribe_m4a(audio_path: Path, model_size: str, device: str, min_duration:
         if text:
             full_text_parts.append(text)
 
-    text = "\n".join(full_text_parts)
-    return text, model
+    return "\n".join(full_text_parts)
 
 
 def simplify(text: str) -> str:
@@ -145,6 +147,11 @@ def process_directory(
 
     print(f"发现 {len(to_transcribe)} 个待转写 m4a 文件")
 
+    # ── 创建 WhisperModel（只加载一次，所有文件复用） ──
+    compute_type = "float16" if device == "cuda" else "int8"
+    print(f"  加载 Whisper 模型: {model_size} (device={device}, compute={compute_type})")
+    whisper_model = WhisperModel(model_size, device=device, compute_type=compute_type)
+
     result = TranscribeResult(found=len(to_transcribe))
     out_parent = (output_dir or input_dir).resolve()
     out_parent.mkdir(parents=True, exist_ok=True)
@@ -152,9 +159,9 @@ def process_directory(
     for m4a in to_transcribe:
         print(f"\n转写: {m4a.name}")
         try:
-            text, model = transcribe_m4a(m4a, model_size, device, min_duration=min_duration)
+            text = transcribe_m4a(m4a, whisper_model, min_duration=min_duration)
 
-            # 时长不足时 transcribe_m4a 返回 (None, None)
+            # 时长不足时 transcribe_m4a 返回 None
             if text is None:
                 if delete_audio:
                     m4a.unlink()

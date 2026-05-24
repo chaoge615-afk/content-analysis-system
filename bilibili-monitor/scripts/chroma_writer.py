@@ -7,62 +7,9 @@ import chromadb
 from chromadb.config import Settings
 from typing import List, Optional
 
-# Add project root to path for shared_config
+# Add project root to path for shared modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from shared_config import config
-
-
-class SiliconFlowEmbeddings:
-    """SiliconFlow Embeddings implementation using their API."""
-
-    def __init__(self):
-        self.api_key = config.embedding.api_key
-        self.base_url = config.embedding.base_url
-        self.model = config.embedding.model
-
-        if not self.api_key:
-            raise ValueError(
-                "SiliconFlow API key not configured. "
-                "Please set EMBEDDING_API_KEY in .env"
-            )
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed a list of documents."""
-        import requests
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
-        embeddings = []
-        # Process in batches to avoid hitting API limits
-        batch_size = 10
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
-            data = {
-                "model": self.model,
-                "input": batch,
-            }
-
-            response = requests.post(
-                f"{self.base_url}/embeddings",
-                headers=headers,
-                json=data,
-                timeout=30,
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            # Extract embeddings from response
-            batch_embeddings = [item["embedding"] for item in result["data"]]
-            embeddings.extend(batch_embeddings)
-
-        return embeddings
-
-    def embed_query(self, text: str) -> List[float]:
-        """Embed a single query."""
-        return self.embed_documents([text])[0]
+from shared_embeddings import SiliconFlowEmbeddings
 
 
 class ChromaWriter:

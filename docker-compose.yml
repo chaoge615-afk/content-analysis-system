@@ -63,8 +63,8 @@ services:
   # RAG 服务（语义检索）
   rag:
     build:
-      context: ./personal-knowledge-rag
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: personal-knowledge-rag/Dockerfile
     container_name: rag
     profiles: [dev, nas]
     ports:
@@ -159,8 +159,8 @@ services:
   # 启动方式: docker compose run --rm bilibili-monitor
   bilibili-monitor:
     build:
-      context: ./bilibili-monitor
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: bilibili-monitor/Dockerfile
     container_name: bilibili-monitor
     profiles: [dev, nas]
     environment:

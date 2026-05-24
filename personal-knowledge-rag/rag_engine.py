@@ -9,7 +9,6 @@
 
 import os
 import re
-import requests
 import anthropic
 from typing import List, Dict, Optional
 from pathlib import Path
@@ -18,55 +17,20 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_core.prompts import PromptTemplate
-from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 
 # 混合检索模块
 from hybrid_search import BM25, HybridSearch
 
+# 共享 Embeddings 模块（根目录 shared_embeddings.py）
+import sys
+_ROOT_DIR = str(Path(__file__).parent.parent)
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
+from shared_embeddings import SiliconFlowEmbeddings
+
 # 加载环境变量
 load_dotenv()
-
-
-class SiliconFlowEmbeddings(Embeddings):
-    """SiliconFlow Embedding 适配（BAAI/bge-large-zh-v1.5）"""
-
-    def __init__(
-        self,
-        api_key: str,
-        model: str = "BAAI/bge-large-zh-v1.5",
-        base_url: str = "https://api.siliconflow.cn/v1",
-    ):
-        self.api_key = api_key
-        self.model = model
-        self.base_url = base_url
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """批量 embed 文档"""
-        url = f"{self.base_url}/embeddings"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        data = {"input": texts, "model": self.model}
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            result = response.json()
-
-            if "data" in result:
-                return [item["embedding"] for item in result["data"]]
-            else:
-                raise ValueError(f"Unexpected response format: {result}")
-        except Exception as e:
-            raise
-
-    def embed_query(self, text: str) -> List[float]:
-        """embed 单个查询"""
-        vectors = self.embed_documents([text])
-        if not vectors or vectors[0] is None:
-            raise ValueError("Embedding returned empty or None")
-        return vectors[0]
 
 
 def extract_video_metadata(file_path: str) -> dict:

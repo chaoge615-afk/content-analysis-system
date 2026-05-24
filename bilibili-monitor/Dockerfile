@@ -1,3 +1,5 @@
+# bilibili-monitor Dockerfile
+# 构建上下文: 根目录（需要访问 shared_config.py 和 shared_embeddings.py）
 FROM python:3.11-slim
 
 # 使用国内 Debian 镜像加速 apt 安装
@@ -14,14 +16,18 @@ RUN apt-get update && apt-get install -y --fix-missing \
 # 设置工作目录
 WORKDIR /app
 
+# 复制共享模块（根目录）
+COPY shared_config.py shared_embeddings.py ./
+
 # 复制依赖文件
-COPY requirements.txt .
+COPY bilibili-monitor/requirements.txt .
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制项目文件
-COPY . .
+COPY bilibili-monitor/scripts/ ./scripts/
+COPY bilibili-monitor/config/ ./config/
 
 # 创建必要目录
 RUN mkdir -p downloads transcripts data chromadb

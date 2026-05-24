@@ -1,0 +1,29 @@
+# 根目录 .dockerignore（构建上下文为根目录时使用）
+
+# Git
+.git
+.gitignore
+
+# 所有子项目的 node_modules
+**/node_modules
+
+# Python 缓存
+**/__pycache__
+**/*.pyc
+
+# 数据目录（运行时挂载，不需要构建进镜像）
+**/data
+**/downloads
+**/transcripts
+**/chromadb
+**/knowledge
+**/video_knowledge
+**/chroma_db
+**/logs
+
+# 文档（不需要进镜像）
+*.md
+
+# IDE
+.vscode
+.idea
