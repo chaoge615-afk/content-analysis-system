@@ -53,22 +53,23 @@ MINIMAX_GROUP_ID=0
 
 **使用项目**：
 - text-to-sql（SQL 生成）
-- personal-knowledge-rag（问答）
-- bilibili-monitor（意图分类）
+- router-agent（意图分类）
+- personal-knowledge-rag（问答备选）
 
-#### 2.2 DeepSeek V4 Pro（精炼专用）
+#### 2.2 DeepSeek V4 Pro（精炼 + RAG 问答）
 
 **提供商**：DeepSeek（自定义代理端点）
 
 **配置项**：
 ```bash
-REFINE_API_URL=http://140.143.147.125:3300/v1/chat/completions
+REFINE_API_URL=http://10.168.165.50:3300/v1/chat/completions
 REFINE_API_KEY=sk-xxx
 REFINE_MODEL=deepseek-v4-pro
 ```
 
 **使用项目**：
 - bilibili-monitor（refiner.py 内容精炼）
+- personal-knowledge-rag（RAG 问答默认 LLM）
 - refine_batch.py（批量精炼）
 
 ## 在子项目中使用
@@ -162,7 +163,7 @@ REFINE_MODEL = config.chat.refine_model
 # rag_engine.py
 from shared_config import config
 
-class MinimaxEmbeddings(Embeddings):
+class SiliconFlowEmbeddings(Embeddings):
     def __init__(self):
         self.api_key = config.embedding.api_key
         self.base_url = config.embedding.base_url
@@ -191,8 +192,8 @@ MODEL_NAME = config.chat.model
   - 适合复杂推理和代码生成
 
 - **DeepSeek**：通过自定义代理访问
-  - V4 Pro 模型，精炼效果好
-  - 端点：http://140.143.147.125:3300
+  - V4 Pro 模型，精炼效果好，也是 RAG 问答默认 LLM
+  - 端点：http://10.168.165.50:3300
 
 ## 常见问题
 
@@ -241,5 +242,6 @@ python shared_config.py
 
 ## 更新日志
 
+- **2026-05-25**：修正 DeepSeek 端点（10.168.165.50:3300），添加 RAG 作为 DeepSeek 用户，MinimaxEmbeddings → SiliconFlowEmbeddings，MiniMax 用户新增 router-agent
 - **2026-05-24**：初始版本，统一 Embedding 和 Chat 配置
-- 支持项目：bilibili-monitor, personal-knowledge-rag, text-to-sql, relationship-analysis
+- 支持项目：bilibili-monitor, personal-knowledge-rag, text-to-sql, router-agent, relationship-analysis
