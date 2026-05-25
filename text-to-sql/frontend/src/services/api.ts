@@ -48,6 +48,8 @@ export interface TriggerStatusResponse {
   status: string;           // "idle" | "running" | "completed" | "failed"
   task: TriggerTask | null;
   docker_available: boolean;
+  cookie_ok?: boolean;
+  cookie_message?: string;
 }
 
 export interface QueryLogItem {

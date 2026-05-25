@@ -54,6 +54,26 @@ def parse_netscape_cookie(cookie_file: str) -> Dict[str, str]:
 
 
 def load_cookie_from_file(cookie_path: str) -> Dict[str, str]:
-    """加载cookie，支持~扩展"""
+    """加载cookie，支持~扩展 + BILIBILI_COOKIE 环境变量回退"""
     cookie_path = os.path.expanduser(cookie_path)
-    return parse_netscape_cookie(cookie_path)
+    if os.path.exists(cookie_path):
+        return parse_netscape_cookie(cookie_path)
+
+    # 文件不存在，尝试从 BILIBILI_COOKIE 环境变量获取
+    env_cookie = os.getenv("BILIBILI_COOKIE", "")
+    if env_cookie:
+        # 如果是文件路径（指向一个存在的文件），读取该文件
+        env_path = os.path.expanduser(env_cookie)
+        if os.path.exists(env_path):
+            return parse_netscape_cookie(env_path)
+
+        # 否则当作 cookie 内容，写入文件后解析
+        print(f"  Cookie 文件不存在({cookie_path})，从环境变量 BILIBILI_COOKIE 写入")
+        os.makedirs(os.path.dirname(cookie_path), exist_ok=True)
+        with open(cookie_path, "w", encoding="utf-8") as f:
+            f.write(env_cookie)
+        return parse_netscape_cookie(cookie_path)
+
+    raise FileNotFoundError(
+        f"Cookie文件不存在: {cookie_path}，且环境变量 BILIBILI_COOKIE 未设置"
+    )

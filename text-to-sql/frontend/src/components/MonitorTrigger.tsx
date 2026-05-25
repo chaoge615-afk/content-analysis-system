@@ -248,7 +248,7 @@ export default function MonitorTrigger() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleTrigger}
-            disabled={isRunning || triggering || !status?.docker_available}
+            disabled={isRunning || triggering || !status?.docker_available || status?.cookie_ok === false}
             className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium
                        hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
                        transition-colors whitespace-nowrap"
@@ -274,6 +274,19 @@ export default function MonitorTrigger() {
       {status && !status.docker_available && (
         <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded">
           Docker 不可用，请确认 Docker socket 已正确挂载
+        </div>
+      )}
+
+      {/* Cookie 状态提示 */}
+      {status && status.cookie_ok === false && (
+        <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">
+          <div className="font-medium mb-1">Cookie 未配置</div>
+          <div className="text-xs text-red-500">{status.cookie_message}</div>
+          <div className="text-xs text-gray-500 mt-1">
+            请在项目根目录 <code className="bg-red-100 px-1 rounded">.env</code> 中设置
+            <code className="bg-red-100 px-1 rounded">BILIBILI_COOKIE</code>，
+            值为 Cookie 文件路径或 Netscape 格式内容
+          </div>
         </div>
       )}
 

@@ -46,12 +46,44 @@ class MonitorTrigger:
         except Exception:
             return False
 
+    def check_cookie(self) -> dict:
+        """
+        预检 Cookie 配置是否可用
+        返回 { ok: bool, message: str }
+        """
+        cookie_val = os.getenv("BILIBILI_COOKIE", "")
+        if not cookie_val:
+            return {
+                "ok": False,
+                "message": "环境变量 BILIBILI_COOKIE 未设置。请在 .env 中配置 BILIBILI_COOKIE（Cookie 文件路径或内容）",
+            }
+
+        # 如果是文件路径，检查文件是否存在
+        cookie_path = os.path.expanduser(cookie_val)
+        if os.path.exists(cookie_path):
+            return {
+                "ok": True,
+                "message": f"Cookie 文件就绪: {os.path.basename(cookie_path)}",
+            }
+
+        # 不是路径，检查是否像 Netscape cookie 内容（至少包含 SESSDATA 或 DedeUserID）
+        if "SESSDATA" in cookie_val or "DedeUserID" in cookie_val:
+            return {
+                "ok": True,
+                "message": "Cookie 内容已配置（环境变量），启动时将自动写入容器",
+            }
+
+        return {
+            "ok": False,
+            "message": "BILIBILI_COOKIE 已设置但内容无效（不是文件路径，也不包含 SESSDATA/DedeUserID）",
+        }
+
     def trigger(self, params: Optional[dict] = None) -> dict:
         """
         触发采集任务（非阻塞）
 
         Args:
-            params: 可选参数 { max_videos, up_name }
+            params: 可选参数 { max_videos, up_names }
 
         Returns:
             任务信息 { status, started_at, error? }
@@ -59,6 +91,14 @@ class MonitorTrigger:
         params = params or {}
 
         with self._lock:
+            # 预检：Cookie 配置
+            cookie_check = self.check_cookie()
+            if not cookie_check["ok"]:
+                return {
+                    "success": False,
+                    "error": f"Cookie 预检失败: {cookie_check['message']}",
+                }
+
             # 检查是否已有运行中的任务
             if self._task and self._task.get("status") == "running":
                 return {
@@ -137,11 +177,15 @@ class MonitorTrigger:
 
     def get_status(self) -> dict:
         """获取当前任务状态"""
+        cookie_check = self.check_cookie()
+
         if self._task is None:
             return {
                 "status": "idle",
                 "task": None,
                 "docker_available": self.is_available,
+                "cookie_ok": cookie_check["ok"],
+                "cookie_message": cookie_check["message"],
             }
 
         # 如果运行中，尝试更新日志
@@ -152,6 +196,8 @@ class MonitorTrigger:
             "status": self._task.get("status", "unknown"),
             "task": self._task,
             "docker_available": self.is_available,
+            "cookie_ok": cookie_check["ok"],
+            "cookie_message": cookie_check["message"],
         }
 
     def _find_monitor_image(self, client) -> Optional[str]:
