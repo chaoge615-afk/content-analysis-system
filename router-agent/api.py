@@ -310,6 +310,95 @@ async def delete_cookie():
         return {"success": False, "error": f"删除失败: {e}"}
 
 
+@app.post("/api/cookie/test")
+async def test_cookie_api():
+    """测试 Cookie 有效性（调用 B站 API 验证）"""
+    import re
+    import requests as req
+
+    # 读取 cookie 文件
+    if not os.path.exists(COOKIE_FILE):
+        return {"success": False, "valid": False, "error": "Cookie 文件不存在，请先保存"}
+
+    try:
+        with open(COOKIE_FILE, encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        return {"success": False, "valid": False, "error": f"读取文件失败: {e}"}
+
+    # 解析 Netscape 格式
+    needed_keys = {"SESSDATA", "bili_jct", "DedeUserID"}
+    cookies = {}
+    for line in content.strip().split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = re.split(r"\s+", line)
+        if len(parts) >= 7:
+            name = parts[5]
+            if name in needed_keys:
+                cookies[name] = parts[6]
+
+    missing = needed_keys - set(cookies.keys())
+    if missing:
+        return {
+            "success": False,
+            "valid": False,
+            "error": f"Cookie 缺少必需字段: {missing}",
+        }
+
+    # 调用 B站 API 验证
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://www.bilibili.com/",
+    }
+    try:
+        resp = req.get(
+            "https://api.bilibili.com/x/web-interface/nav",
+            headers=headers,
+            cookies=cookies,
+            timeout=10,
+        )
+        data = resp.json()
+        code = data.get("code", 0)
+
+        if code == 0:
+            uname = data.get("data", {}).get("uname", "未知")
+            mid = data.get("data", {}).get("mid", "")
+            is_login = data.get("data", {}).get("isLogin", False)
+            return {
+                "success": True,
+                "valid": True,
+                "message": f"Cookie 有效，已登录用户: {uname} (mid: {mid})",
+                "uname": uname,
+                "mid": mid,
+                "is_login": is_login,
+            }
+        elif code == -101:
+            return {
+                "success": True,
+                "valid": False,
+                "error": "Cookie 已过期或未登录，请重新获取",
+                "code": code,
+            }
+        elif code == -352:
+            return {
+                "success": True,
+                "valid": False,
+                "error": "风控校验失败（Cookie 已过期或被风控）",
+                "code": code,
+            }
+        else:
+            return {
+                "success": True,
+                "valid": False,
+                "error": f"B站 API 返回错误: {data.get('message', '未知')} (code={code})",
+                "code": code,
+            }
+    except Exception as e:
+        return {"success": False, "valid": False, "error": f"API 请求失败: {e}"}
+
+
 # ============ 健康检查 ============
 
 @app.get("/")

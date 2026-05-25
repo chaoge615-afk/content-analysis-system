@@ -5,6 +5,7 @@ import {
   getUpList,
   saveCookie,
   deleteCookie,
+  testCookie,
   TriggerStatusResponse,
   UpInfo,
 } from '../services/api';
@@ -25,6 +26,13 @@ export default function MonitorTrigger() {
   const [cookieSaving, setCookieSaving] = useState(false);
   const [cookieMsg, setCookieMsg] = useState('');
   const [cookieMsgType, setCookieMsgType] = useState<'ok' | 'err'>('ok');
+  const [cookieTesting, setCookieTesting] = useState(false);
+  const [cookieTestResult, setCookieTestResult] = useState<{
+    valid: boolean;
+    message?: string;
+    error?: string;
+    uname?: string;
+  } | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -122,12 +130,33 @@ export default function MonitorTrigger() {
     if (result.success) {
       setCookieMsg(result.message || 'Cookie 已删除');
       setCookieMsgType('ok');
+      setCookieTestResult(null);
       fetchStatus();
     } else {
       setCookieMsg(result.error || '删除失败');
       setCookieMsgType('err');
     }
     setCookieSaving(false);
+  };
+
+  const handleTestCookie = async () => {
+    setCookieTesting(true);
+    setCookieTestResult(null);
+    const result = await testCookie();
+    if (result.success) {
+      setCookieTestResult({
+        valid: result.valid ?? false,
+        message: result.message,
+        error: result.error,
+        uname: result.uname,
+      });
+    } else {
+      setCookieTestResult({
+        valid: false,
+        error: result.error || '测试请求失败',
+      });
+    }
+    setCookieTesting(false);
   };
 
   const handleTrigger = async () => {
@@ -273,16 +302,48 @@ export default function MonitorTrigger() {
                 {cookieSaving ? '保存中...' : '保存 Cookie'}
               </button>
               {status?.cookie_ok && status?.cookie_source === 'file' && (
-                <button
-                  onClick={handleDeleteCookie}
-                  disabled={cookieSaving}
-                  className="px-3 py-1.5 border border-red-300 text-red-600 rounded text-xs
-                             hover:bg-red-50 disabled:opacity-50 transition-colors"
-                >
-                  删除已保存的 Cookie
-                </button>
+                <>
+                  <button
+                    onClick={handleTestCookie}
+                    disabled={cookieTesting}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium
+                               hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed
+                               transition-colors"
+                  >
+                    {cookieTesting ? '测试中...' : '测试 Cookie'}
+                  </button>
+                  <button
+                    onClick={handleDeleteCookie}
+                    disabled={cookieSaving}
+                    className="px-3 py-1.5 border border-red-300 text-red-600 rounded text-xs
+                               hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    删除已保存的 Cookie
+                  </button>
+                </>
               )}
             </div>
+
+            {/* 测试结果 */}
+            {cookieTestResult && (
+              <div
+                className={`text-xs px-2 py-1.5 rounded ${
+                  cookieTestResult.valid
+                    ? 'text-green-700 bg-green-50'
+                    : 'text-red-700 bg-red-50'
+                }`}
+              >
+                {cookieTestResult.valid && cookieTestResult.uname && (
+                  <span>✓ 登录用户: {cookieTestResult.uname}</span>
+                )}
+                {cookieTestResult.valid && !cookieTestResult.uname && (
+                  <span>✓ {cookieTestResult.message || 'Cookie 有效'}</span>
+                )}
+                {!cookieTestResult.valid && (
+                  <span>✗ {cookieTestResult.error || cookieTestResult.message || 'Cookie 无效'}</span>
+                )}
+              </div>
+            )}
 
             {/* 操作反馈 */}
             {cookieMsg && (

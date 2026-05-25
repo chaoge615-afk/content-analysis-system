@@ -269,6 +269,27 @@ export async function deleteCookie(): Promise<{ success: boolean; message?: stri
   }
 }
 
+/** 测试 Cookie 有效性 */
+export interface CookieTestResult {
+  success: boolean;
+  valid?: boolean;
+  message?: string;
+  error?: string;
+  uname?: string;
+  mid?: string;
+  is_login?: boolean;
+  code?: number;
+}
+
+export async function testCookie(): Promise<CookieTestResult> {
+  try {
+    const response = await api.post<CookieTestResult>('/api/cookie/test');
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
 // ============ 旧接口（向后兼容） ============
 
 export async function query(question: string): Promise<QueryResult> {
