@@ -115,7 +115,7 @@ B站视频自动采集：拉取视频列表 → yt-dlp 下载 → faster-whisper
 自然语言转 SQL 查询：4-Agent pipeline（schema → intent → SQL 生成 → 执行），前端 React 对话界面
 
 ### router-agent/
-统一入口：意图分类（structured / semantic / hybrid）→ 分发到 Text-to-SQL 或 RAG → hybrid 模式 LLM 融合结果
+统一入口：意图分类（structured / semantic / hybrid）→ 分发到 Text-to-SQL 或 RAG → hybrid 模式 LLM 融合结果。支持 UP主 名称标准化（简称→全名，如"桃姐"→"恋爱教头桃姐"），智能降级（SQL 空结果自动回退到 RAG 内容）
 
 ## 技术栈
 
