@@ -17,9 +17,13 @@ class QueryDispatcher:
         self.rag_url = RAG_SERVICE_URL
         self.timeout = REQUEST_TIMEOUT
 
-    def query_sql(self, question: str) -> dict:
+    def query_sql(self, question: str, filters: Optional[dict] = None) -> dict:
         """
         发送到 Text-to-SQL 服务
+
+        Args:
+            question: 用户问题
+            filters: 标准化后的过滤条件（up_name 等会被注入到问题中）
 
         Returns:
             {
@@ -30,10 +34,21 @@ class QueryDispatcher:
                 "error": str | None
             }
         """
+        # 将标准化的过滤条件注入问题文本，帮助 SQL 生成
+        enhanced_question = question
+        if filters:
+            hints = []
+            if filters.get("up_name"):
+                hints.append(f"（UP主完整名称是：{filters['up_name']}）")
+            if filters.get("category"):
+                hints.append(f"（分类名：{filters['category']}）")
+            if hints:
+                enhanced_question = f"{question} {' '.join(hints)}"
+
         try:
             resp = requests.post(
                 f"{self.sql_url}/query",
-                json={"question": question},
+                json={"question": enhanced_question},
                 timeout=self.timeout,
             )
             resp.raise_for_status()

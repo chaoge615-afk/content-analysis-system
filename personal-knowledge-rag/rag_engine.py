@@ -282,11 +282,19 @@ class KnowledgeRAG:
         if self.video_vector_db._collection.count() == 0:
             return "视频知识库还是空的，请先加载视频精炼内容"
 
-        # 构建 ChromaDB where 过滤条件
+        # 提取 keywords 用于增强查询文本（不传给 ChromaDB where filter）
+        query_text = question
+        metadata_filter = dict(metadata_filter or {})
+        if "keywords" in metadata_filter:
+            kw = metadata_filter.pop("keywords", "")
+            if kw:
+                query_text = f"{question} {kw}"
+
+        # 构建 ChromaDB where 过滤条件（不含 keywords）
         where_filter = self._build_where_filter(metadata_filter)
 
         if use_hybrid:
-            docs = self._hybrid_search_video(question, where_filter)
+            docs = self._hybrid_search_video(query_text, where_filter)
         else:
             # 纯向量检索
             search_kwargs = {"k": self.top_k}
@@ -295,7 +303,7 @@ class KnowledgeRAG:
             retriever = self.video_vector_db.as_retriever(
                 search_kwargs=search_kwargs
             )
-            docs = retriever.invoke(question)
+            docs = retriever.invoke(query_text)
 
         if not docs:
             return "在视频知识库中没有找到相关内容"

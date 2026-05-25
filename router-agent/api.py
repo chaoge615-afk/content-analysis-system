@@ -91,7 +91,7 @@ async def chat(req: ChatRequest):
 
     # Step 2: 分发查询
     if route_type == "structured":
-        sql_result = dispatcher.query_sql(question)
+        sql_result = dispatcher.query_sql(question, filters=filters)
         answer = sql_result.get("answer") or sql_result.get("error", "查询无结果")
         elapsed = time.time() - start_time
 
@@ -126,7 +126,7 @@ async def chat(req: ChatRequest):
     else:  # hybrid
         # 并行调用 SQL + RAG
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            sql_future = executor.submit(dispatcher.query_sql, question)
+            sql_future = executor.submit(dispatcher.query_sql, question, filters)
             rag_future = executor.submit(dispatcher.query_rag, question, filters)
 
             sql_result = sql_future.result()
