@@ -277,49 +277,69 @@ async def get_system_metrics():
     - 查询统计
     - 运行时间
     """
+    import asyncio
     import requests as req_lib
 
-    metrics = {
-        "uptime": monitor_trigger.get_uptime(),
-        "containers": {},
-        "rag_stats": {},
-        "sql_stats": {},
-        "query_stats": {},
-    }
+    # 在线程池中执行阻塞操作，避免阻塞事件循环
+    def _collect_metrics():
+        metrics = {
+            "uptime": monitor_trigger.get_uptime(),
+            "containers": {},
+            "rag_stats": {},
+            "sql_stats": {},
+            "query_stats": {},
+        }
 
-    # 1. 容器指标（Docker SDK）
-    try:
-        metrics["containers"] = monitor_trigger.get_container_metrics()
-    except Exception as e:
-        metrics["containers"] = {"_error": str(e)}
+        # 1. 容器指标（Docker SDK）
+        try:
+            metrics["containers"] = monitor_trigger.get_container_metrics()
+        except Exception as e:
+            metrics["containers"] = {"_error": str(e)}
 
-    # 2. RAG 统计
-    try:
-        rag_url = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
-        resp = req_lib.get(f"{rag_url}/api/stats", timeout=5)
-        if resp.status_code == 200:
-            metrics["rag_stats"] = resp.json()
-    except Exception as e:
-        metrics["rag_stats"] = {"error": str(e)}
+        # 2. RAG 统计
+        try:
+            rag_url = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
+            resp = req_lib.get(f"{rag_url}/api/stats", timeout=5)
+            if resp.status_code == 200:
+                metrics["rag_stats"] = resp.json()
+        except Exception as e:
+            metrics["rag_stats"] = {"error": str(e)}
 
-    # 3. SQL/数据库统计（通过 Text-to-SQL 查询）
-    try:
-        result = dispatcher.query_sql("数据库各表的记录数量")
-        if result.get("success"):
-            metrics["sql_stats"] = {"tables": result.get("result", [])}
-        # 视频总数
-        video_result = dispatcher.query_sql("知识库一共有多少个视频")
-        if video_result.get("success") and video_result.get("result"):
-            metrics["sql_stats"]["total_videos"] = video_result["result"]
-    except Exception as e:
-        metrics["sql_stats"] = {"error": str(e)}
+        # 3. SQL/数据库统计（通过 Text-to-SQL 查询，使用短超时）
+        try:
+            sql_url = os.getenv("SQL_SERVICE_URL", "http://localhost:8010")
+            resp = req_lib.post(
+                f"{sql_url}/query",
+                json={"question": "数据库各表的记录数量"},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success"):
+                    metrics["sql_stats"] = {"tables": data.get("result", [])}
+            # 视频总数
+            resp2 = req_lib.post(
+                f"{sql_url}/query",
+                json={"question": "知识库一共有多少个视频"},
+                timeout=15,
+            )
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                if data2.get("success") and data2.get("result"):
+                    metrics["sql_stats"]["total_videos"] = data2["result"]
+        except Exception as e:
+            metrics["sql_stats"] = {"error": str(e)}
 
-    # 4. 查询统计
-    try:
-        metrics["query_stats"] = query_logger.get_stats()
-    except Exception as e:
-        metrics["query_stats"] = {"error": str(e)}
+        # 4. 查询统计
+        try:
+            metrics["query_stats"] = query_logger.get_stats()
+        except Exception as e:
+            metrics["query_stats"] = {"error": str(e)}
 
+        return metrics
+
+    loop = asyncio.get_event_loop()
+    metrics = await loop.run_in_executor(None, _collect_metrics)
     return metrics
 
 
