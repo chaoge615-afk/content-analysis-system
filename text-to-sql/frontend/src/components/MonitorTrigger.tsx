@@ -12,6 +12,7 @@ export default function MonitorTrigger() {
   const [maxVideos, setMaxVideos] = useState('');
   const [selectedUps, setSelectedUps] = useState<string[]>([]);
   const [upList, setUpList] = useState<UpInfo[]>([]);
+  const [upListLoading, setUpListLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +22,17 @@ export default function MonitorTrigger() {
 
   // 加载 UP主 列表
   useEffect(() => {
-    getUpList().then(setUpList);
+    setUpListLoading(true);
+    getUpList()
+      .then((data) => {
+        console.log('[MonitorTrigger] UP主列表:', data);
+        setUpList(data);
+      })
+      .catch((err) => {
+        console.error('[MonitorTrigger] 加载UP主列表失败:', err);
+        setUpList([]);
+      })
+      .finally(() => setUpListLoading(false));
   }, []);
 
   useEffect(() => {
@@ -202,7 +213,11 @@ export default function MonitorTrigger() {
           {/* 下拉选项 */}
           {dropdownOpen && !isRunning && (
             <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-52 overflow-y-auto">
-              {upList.length === 0 ? (
+              {upListLoading ? (
+                <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                  加载中...
+                </div>
+              ) : upList.length === 0 ? (
                 <div className="px-3 py-4 text-sm text-gray-400 text-center">
                   暂无 UP主 数据
                 </div>
