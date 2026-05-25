@@ -17,8 +17,8 @@ API_URL = os.getenv('REFINE_API_URL', 'http://10.168.165.50:3300/v1/chat/complet
 API_KEY = os.getenv('REFINE_API_KEY', os.getenv('MINIMAX_API_KEY', ''))
 REFINE_MODEL = os.getenv('REFINE_MODEL', 'deepseek-v4-pro')
 
-MAX_RETRIES = 3
-REFINE_SLEEP = 5
+MAX_RETRIES = 2
+REFINE_SLEEP = 30
 
 # 精炼 Prompt
 REFINE_PROMPT = """你是一个情感/两性知识内容创作者。请将下面的原始素材精炼成统一的三段式结构。
