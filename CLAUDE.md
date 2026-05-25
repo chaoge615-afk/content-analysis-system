@@ -4,13 +4,13 @@
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
 ## 当前状态（2026-05-25）
-- Phase 1-7 全部完成 + P0/P1/P2 全部完成（132/133 任务完成）
+- Phase 1-8 全部完成（133/133 任务）✅
 - P0 完成：bilibili-monitor 全流程验证通过
 - P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
 - P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
 - 前端新增管理面板（Tab 切换：对话 / 管理面板）
 - router-agent 新增 Docker socket 挂载 + docker SDK（用于触发 bilibili-monitor 容器）
-- 剩余：Docker 部署验证（需重建 router-agent + frontend 镜像）
+- Docker 部署验证通过（5 个服务全部正常运行）
 
 ## 技术栈
 - Python 3.11 / Node.js 24 / Git 2.53
