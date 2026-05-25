@@ -4,15 +4,13 @@
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
 ## 当前状态（2026-05-25）
-- Phase 1-7 全部完成，P1 代码质量优化完成（129/130 任务完成）
-- P0 完成：bilibili-monitor 全流程验证通过（下载→转写→精炼→DuckDB+ChromaDB入库）
-- Cookie 有效（账号：chaoge--），可随时采集新视频
-- 所有服务 Docker 化并运行正常（chromadb / text-to-sql / rag / router-agent / frontend）
-- bilibili-cron 定时调度已配置（每 6 小时，仅 nas profile）
-- RAG 默认 LLM 使用 MiniMax（DeepSeek 配额不足）
-- **P1-1 完成**：checkpoint 文件从模糊匹配改为 UID 命名，67行→1行
-- **P1-2 完成**：router-agent SDK 统一为 Anthropic（与 text-to-sql / RAG 一致）
-- 剩余任务见 `开发计划.md` Phase 8（P2: 功能增强 x3）
+- Phase 1-7 全部完成 + P0/P1/P2 全部完成（132/133 任务完成）
+- P0 完成：bilibili-monitor 全流程验证通过
+- P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
+- P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
+- 前端新增管理面板（Tab 切换：对话 / 管理面板）
+- router-agent 新增 Docker socket 挂载 + docker SDK（用于触发 bilibili-monitor 容器）
+- 剩余：Docker 部署验证（需重建 router-agent + frontend 镜像）
 
 ## 技术栈
 - Python 3.11 / Node.js 24 / Git 2.53

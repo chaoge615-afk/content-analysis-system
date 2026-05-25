@@ -122,8 +122,21 @@ services:
       - SQL_SERVICE_URL=http://text-to-sql:8010
       - RAG_SERVICE_URL=http://rag:8090
       - DUCKDB_PATH=/app/data/content.db
+      # 透传 bilibili-monitor 所需环境变量（用于触发采集）
+      - BILIBILI_COOKIE=${BILIBILI_COOKIE}
+      - QQ_BOT_URL=${QQ_BOT_URL}
+      - QQ_USER_ID=${QQ_USER_ID}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - REFINE_API_URL=${REFINE_API_URL}
+      - REFINE_API_KEY=${REFINE_API_KEY}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
     volumes:
       - duckdb-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket（用于触发 bilibili-monitor）
     depends_on:
       text-to-sql:
         condition: service_healthy

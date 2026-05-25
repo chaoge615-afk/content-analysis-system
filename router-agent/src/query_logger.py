@@ -89,6 +89,71 @@ class QueryLogger:
             print(f"[QueryLogger] 查询日志失败: {e}")
             return []
 
+    def get_paginated(
+        self, page: int = 1, page_size: int = 20, route_type: Optional[str] = None
+    ) -> dict:
+        """
+        分页查询日志
+
+        Args:
+            page: 页码（从 1 开始）
+            page_size: 每页条数
+            route_type: 按路由类型过滤（可选）
+
+        Returns:
+            { items, total, page, page_size, total_pages }
+        """
+        try:
+            conn = duckdb.connect(self.db_path, read_only=True)
+
+            # 构建 WHERE 条件
+            where = ""
+            params = []
+            if route_type:
+                where = "WHERE route_type = ?"
+                params.append(route_type)
+
+            # 总数
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM query_log {where}", params
+            ).fetchone()[0]
+
+            total_pages = max(1, (total + page_size - 1) // page_size)
+            offset = (page - 1) * page_size
+
+            # 分页数据
+            results = conn.execute(
+                f"""SELECT id, question, route_type, response_time, created_at
+                    FROM query_log {where}
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?""",
+                params + [page_size, offset],
+            ).fetchall()
+
+            conn.close()
+
+            items = [
+                {
+                    "id": r[0],
+                    "question": r[1],
+                    "route_type": r[2],
+                    "response_time": float(r[3]) if r[3] else 0,
+                    "created_at": str(r[4]),
+                }
+                for r in results
+            ]
+
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+        except Exception as e:
+            print(f"[QueryLogger] 分页查询失败: {e}")
+            return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
     def get_stats(self) -> dict:
         """获取查询统计"""
         try:

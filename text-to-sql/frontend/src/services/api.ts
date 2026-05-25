@@ -20,6 +20,78 @@ export interface SystemStatus {
   rag_url: string;
 }
 
+export interface TriggerParams {
+  max_videos?: number;
+  up_name?: string;
+}
+
+export interface TriggerTask {
+  status: string;           // "running" | "completed" | "failed"
+  container_id?: string;
+  container_name?: string;
+  started_at?: string;
+  finished_at?: string | null;
+  error?: string | null;
+  logs?: string[];
+  exit_code?: number;
+  params?: TriggerParams;
+}
+
+export interface TriggerStatusResponse {
+  status: string;           // "idle" | "running" | "completed" | "failed"
+  task: TriggerTask | null;
+  docker_available: boolean;
+}
+
+export interface QueryLogItem {
+  id: number;
+  question: string;
+  route_type: string;
+  response_time: number;
+  created_at: string;
+}
+
+export interface QueryLogPage {
+  items: QueryLogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface QueryStatsResponse {
+  success: boolean;
+  stats: {
+    total_queries: number;
+    by_route_type: Record<string, number>;
+    avg_response_time: number;
+  };
+  queries: QueryLogPage;
+}
+
+export interface ContainerMetric {
+  name: string;
+  status: string;
+  image: string;
+  memory_usage: number;
+  memory_limit: number;
+  memory_percent: number;
+  cpu_percent: number;
+  ports: string[];
+}
+
+export interface SystemMetricsResponse {
+  uptime: string;
+  containers: Record<string, ContainerMetric>;
+  rag_stats: any;
+  sql_stats: any;
+  query_stats: {
+    total_queries: number;
+    by_route_type: Record<string, number>;
+    avg_response_time: number;
+  };
+}
+
 // 保留旧接口向后兼容
 export interface QueryResult {
   success: boolean;
@@ -93,6 +165,58 @@ export async function getCategories(): Promise<any[]> {
     return response.data?.data || [];
   } catch {
     return [];
+  }
+}
+
+// ============ 采集触发 API ============
+
+/** 触发 bilibili-monitor 采集 */
+export async function triggerMonitor(params?: TriggerParams): Promise<any> {
+  try {
+    const response = await api.post('/api/trigger_monitor', params || {});
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+/** 获取采集任务状态 */
+export async function getTriggerStatus(): Promise<TriggerStatusResponse> {
+  try {
+    const response = await api.get<TriggerStatusResponse>('/api/trigger_status');
+    return response.data;
+  } catch {
+    return { status: 'idle', task: null, docker_available: false };
+  }
+}
+
+// ============ 查询日志 API ============
+
+/** 获取查询统计（分页） */
+export async function getQueryStats(
+  page: number = 1,
+  pageSize: number = 20,
+  routeType?: string
+): Promise<QueryStatsResponse | null> {
+  try {
+    const params: Record<string, any> = { page, page_size: pageSize };
+    if (routeType) params.route_type = routeType;
+    const response = await api.get<QueryStatsResponse>('/api/query_stats', { params });
+    return response.data;
+  } catch {
+    return null;
+  }
+}
+
+// ============ 系统监控 API ============
+
+/** 获取系统指标 */
+export async function getSystemMetrics(): Promise<SystemMetricsResponse | null> {
+  try {
+    const response = await api.get<SystemMetricsResponse>('/api/system_metrics');
+    return response.data;
+  } catch {
+    return null;
   }
 }
 

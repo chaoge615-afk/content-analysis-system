@@ -3,6 +3,7 @@ Router Agent - FastAPI 服务
 统一入口：意图识别 + 查询分发 + 结果融合
 """
 
+import os
 import time
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 # 确保 src 可导入
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -21,6 +22,7 @@ from src.intent_classifier import IntentClassifier
 from src.query_dispatcher import QueryDispatcher
 from src.result_merger import ResultMerger
 from src.query_logger import QueryLogger
+from src.monitor_trigger import MonitorTrigger
 
 # ============ FastAPI 应用 ============
 app = FastAPI(title="Router Agent", version="1.0.0", description="智能内容分析系统统一入口")
@@ -38,6 +40,7 @@ classifier = IntentClassifier()
 dispatcher = QueryDispatcher()
 merger = ResultMerger()
 query_logger = QueryLogger()
+monitor_trigger = MonitorTrigger()
 
 
 # ============ 请求/响应模型 ============
@@ -55,6 +58,11 @@ class ChatResponse(BaseModel):
     sources: Optional[list] = None
     reasoning: Optional[str] = None
     response_time: Optional[float] = None
+
+
+class TriggerRequest(BaseModel):
+    max_videos: Optional[int] = None   # 最大视频数限制
+    up_name: Optional[str] = None      # 指定 UP 主（可选）
 
 
 # ============ 核心问答接口 ============
@@ -216,27 +224,103 @@ async def health():
 
 
 @app.get("/api/query_stats")
-async def get_query_stats():
-    """查询统计（最近查询记录 + 总体统计）"""
+async def get_query_stats(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    route_type: Optional[str] = Query(None, description="按路由类型过滤"),
+):
+    """查询统计（分页查询记录 + 总体统计）"""
     try:
         stats = query_logger.get_stats()
-        recent = query_logger.get_recent(limit=10)
+        paginated = query_logger.get_paginated(
+            page=page, page_size=page_size, route_type=route_type
+        )
         return {
             "success": True,
             "stats": stats,
-            "recent_queries": [
-                {
-                    "id": r[0],
-                    "question": r[1],
-                    "route_type": r[2],
-                    "response_time": float(r[3]) if r[3] else 0,
-                    "created_at": str(r[4]),
-                }
-                for r in recent
-            ],
+            "queries": paginated,
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ============ 采集触发接口 ============
+
+@app.post("/api/trigger_monitor")
+async def trigger_monitor(req: TriggerRequest):
+    """触发 bilibili-monitor 采集任务"""
+    params = {}
+    if req.max_videos:
+        params["max_videos"] = req.max_videos
+    if req.up_name:
+        params["up_name"] = req.up_name
+
+    result = monitor_trigger.trigger(params)
+    return result
+
+
+@app.get("/api/trigger_status")
+async def get_trigger_status():
+    """获取采集任务状态"""
+    return monitor_trigger.get_status()
+
+
+# ============ 系统监控接口 ============
+
+@app.get("/api/system_metrics")
+async def get_system_metrics():
+    """
+    系统指标聚合
+    - 容器资源使用（内存/CPU）
+    - RAG 知识库统计
+    - 数据库统计
+    - 查询统计
+    - 运行时间
+    """
+    import requests as req_lib
+
+    metrics = {
+        "uptime": monitor_trigger.get_uptime(),
+        "containers": {},
+        "rag_stats": {},
+        "sql_stats": {},
+        "query_stats": {},
+    }
+
+    # 1. 容器指标（Docker SDK）
+    try:
+        metrics["containers"] = monitor_trigger.get_container_metrics()
+    except Exception as e:
+        metrics["containers"] = {"_error": str(e)}
+
+    # 2. RAG 统计
+    try:
+        rag_url = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
+        resp = req_lib.get(f"{rag_url}/api/stats", timeout=5)
+        if resp.status_code == 200:
+            metrics["rag_stats"] = resp.json()
+    except Exception as e:
+        metrics["rag_stats"] = {"error": str(e)}
+
+    # 3. SQL/数据库统计（通过 Text-to-SQL 查询）
+    try:
+        result = dispatcher.query_sql("数据库各表的记录数量")
+        if result.get("success"):
+            metrics["sql_stats"] = {"tables": result.get("result", [])}
+        # 视频总数
+        video_result = dispatcher.query_sql("知识库一共有多少个视频")
+        if video_result.get("success") and video_result.get("result"):
+            metrics["sql_stats"]["total_videos"] = video_result["result"]
+    except Exception as e:
+        metrics["sql_stats"] = {"error": str(e)}
+
+    # 4. 查询统计
+    try:
+        metrics["query_stats"] = query_logger.get_stats()
+    except Exception as e:
+        metrics["query_stats"] = {"error": str(e)}
+
+    return metrics
 
 
 if __name__ == "__main__":
