@@ -3,11 +3,16 @@
 ## 项目概述
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
-## 当前状态（2026-05-25）
+## 当前状态（2026-05-26）
 - Phase 1-8 全部完成（133/133 任务）✅
 - P0 完成：bilibili-monitor 全流程验证通过
 - P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
 - P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
+- **今日优化（2026-05-26）**：
+  - Cookie 管理增强：前端保存/删除/测试 Cookie（B站 nav API 验证）、采集前预检
+  - Cookie 注入修复：直接传内容而非文件路径（修复 volume 名不匹配问题）
+  - 服务监控优化：SQL统计改DuckDB直查 + Docker stats并行采集（23s→2.2s）
+  - 快捷指令美化：新增 QuickView 组件，结构化展示 status/up_list/recent/categories
 - 前端新增管理面板（Tab 切换：对话 / 管理面板）
 - router-agent 新增 Docker socket 挂载 + docker SDK（用于触发 bilibili-monitor 容器）
 - Docker 部署验证通过（5 个服务全部正常运行）
