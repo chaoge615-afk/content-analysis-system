@@ -61,5 +61,8 @@ logs/
 # Claude Code
 .claude/
 
+# Whisper model cache
+bilibili-monitor/models/
+
 # Sub-project git backups
 .git.bak/

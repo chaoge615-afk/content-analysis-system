@@ -114,8 +114,8 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
     """
     from transcribe_local import process_directory
 
-    model_size = config.get('whisper_model', 'medium')
-    device = config.get('whisper_device', 'cuda')
+    model_size = os.getenv('WHISPER_MODEL', config.get('whisper_model', 'medium'))
+    device = os.getenv('WHISPER_DEVICE', config.get('whisper_device', 'cuda'))
 
     # 设置 HuggingFace 镜像
     os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
@@ -125,8 +125,12 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
     if config.get('transcribe_output_dir', ''):
         # 按 UP 主名分子目录
         up_safe = up_name.replace('/', '_').replace('\\', '_')
-        output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
-        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            print(f"  ⚠️ 无法创建转写输出目录 {output_dir}，使用下载目录")
+            output_dir = None
 
     # 传入 done_bvid 文件路径，供 transcribe_local.py 预检跳过已转写的 m4a
     done_bvid_file = _checkpoint_path(config_path, '_done_bvid')
@@ -230,6 +234,7 @@ def main():
     parser.add_argument('--no-transcribe', action='store_true', help='跳过自动转写')
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
     parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
+    parser.add_argument('--max-videos', type=int, default=0, help='最多处理视频数（0=不限制）')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -283,6 +288,8 @@ def main():
 
     # ── 获取视频列表 ──
     max_count = 9999 if is_new_up else 30
+    if args.max_videos > 0:
+        max_count = min(max_count, args.max_videos)
     print(f"正在获取视频列表{'（全量）' if is_new_up else '（第一页）'}...")
     try:
         videos = get_video_list(uid, cookies, max_count=max_count)
@@ -315,7 +322,6 @@ def main():
     # ── metadata-only 模式：只写入 DuckDB，不下载不转写 ──
     if args.metadata_only:
         from db_writer import DBWriter
-        from datetime import datetime
 
         print("\n(--metadata-only 模式，写入 DuckDB)")
         with DBWriter() as db:
