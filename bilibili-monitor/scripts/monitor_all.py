@@ -117,7 +117,18 @@ def main():
         sys.exit(1)
 
     if args.up:
-        configs = [c for c in configs if any(name in c.stem for name in args.up)]
+        # 匹配配置文件名(stem)或 YAML 内的 name 字段
+        def _match(config_path: Path) -> bool:
+            stem = config_path.stem
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f)
+                yaml_name = cfg.get("name", "")
+            except Exception:
+                yaml_name = ""
+            return any(name in stem or name in yaml_name for name in args.up)
+
+        configs = [c for c in configs if _match(c)]
         if not configs:
             print(f"❌ 没有找到匹配 {args.up} 的配置文件")
             sys.exit(1)
