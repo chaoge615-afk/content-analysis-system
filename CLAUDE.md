@@ -4,11 +4,13 @@
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
 ## 当前状态（2026-05-25）
-- Phase 1-7 全部完成（129/135 任务）
-- 1413 个精炼文件已迁移到 DuckDB + ChromaDB（端到端验证通过）
+- Phase 1-7 全部完成（130 任务中 127 完成）
+- P0 完成：bilibili-monitor 全流程验证通过（下载→转写→精炼→DuckDB+ChromaDB入库）
+- Cookie 有效（账号：chaoge--），可随时采集新视频
 - 所有服务 Docker 化并运行正常（chromadb / text-to-sql / rag / router-agent / frontend）
 - bilibili-cron 定时调度已配置（每 6 小时，仅 nas profile）
-- 剩余任务见 `开发计划.md` Phase 8.5（P0: 采集新视频需 Cookie / P1: 代码质量 / P2: 功能增强）
+- RAG 默认 LLM 使用 MiniMax（DeepSeek 配额不足）
+- 剩余任务见 `开发计划.md` Phase 8.5（P1: 代码质量 x2 / P2: 功能增强 x3）
 
 ## 技术栈
 - Python 3.11 / Node.js 24 / Git 2.53
