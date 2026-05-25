@@ -117,7 +117,7 @@ services:
       - "8000:8000"
     environment:
       - CHAT_API_KEY=${MINIMAX_API_KEY}
-      - CHAT_API_URL=https://api.minimaxi.com/v1
+      - CHAT_API_URL=https://api.minimaxi.com/anthropic
       - CHAT_MODEL=${LLM_MODEL:-MiniMax-M2.7}
       - SQL_SERVICE_URL=http://text-to-sql:8010
       - RAG_SERVICE_URL=http://rag:8090

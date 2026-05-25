@@ -4,7 +4,7 @@
 """
 
 import re
-from openai import OpenAI
+import anthropic
 
 from src.config import CHAT_API_KEY, CHAT_API_URL, CHAT_MODEL
 
@@ -36,7 +36,7 @@ class ResultMerger:
     """结果融合器"""
 
     def __init__(self):
-        self.client = OpenAI(
+        self.client = anthropic.Anthropic(
             api_key=CHAT_API_KEY,
             base_url=CHAT_API_URL,
         )
@@ -92,14 +92,18 @@ class ResultMerger:
                 rag_result=rag_text,
             )
 
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=1000,
             )
 
-            content = response.choices[0].message.content
+            text_parts = []
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    text_parts.append(block.text)
+            content = "".join(text_parts) if text_parts else None
             if content:
                 content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                 return content

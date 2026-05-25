@@ -14,8 +14,8 @@ load_dotenv(PROJECT_DIR / ".env")
 
 # ============ LLM 配置（MiniMax M2.7，用于意图分类和结果融合）============
 CHAT_API_KEY = os.getenv("CHAT_API_KEY", os.getenv("MINIMAX_API_KEY", ""))
-# MiniMax OpenAI 兼容端点（/v1），不是 Anthropic 端点（/anthropic）
-CHAT_API_URL = os.getenv("CHAT_API_URL", "https://api.minimaxi.com/v1")
+# MiniMax Anthropic 兼容端点（/anthropic）
+CHAT_API_URL = os.getenv("CHAT_API_URL", "https://api.minimaxi.com/anthropic")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "MiniMax-M2.7")
 
 # ============ 子系统 API 地址 ============

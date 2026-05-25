@@ -13,7 +13,7 @@ import re
 import time
 from difflib import SequenceMatcher
 from typing import Optional
-from openai import OpenAI
+import anthropic
 
 from src.config import CHAT_API_KEY, CHAT_API_URL, CHAT_MODEL, DUCKDB_PATH
 
@@ -103,7 +103,7 @@ class IntentClassifier:
     """意图分类器"""
 
     def __init__(self):
-        self.client = OpenAI(
+        self.client = anthropic.Anthropic(
             api_key=CHAT_API_KEY,
             base_url=CHAT_API_URL,
         )
@@ -188,17 +188,20 @@ class IntentClassifier:
 {up_names_text}
 """
 
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": question},
-                ],
+                system=system_prompt,
+                messages=[{"role": "user", "content": question}],
                 temperature=0.1,
                 max_tokens=500,
             )
 
-            content = response.choices[0].message.content
+            # 过滤 ThinkingBlock，收集 TextBlock
+            text_parts = []
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    text_parts.append(block.text)
+            content = "".join(text_parts) if text_parts else None
             if content is None:
                 return self._default_result()
 
