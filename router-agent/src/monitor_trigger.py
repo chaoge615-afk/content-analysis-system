@@ -414,24 +414,22 @@ class MonitorTrigger:
         return " ".join(parts)
 
     def get_container_metrics(self) -> dict:
-        """获取所有监控容器的资源使用指标"""
+        """获取所有监控容器的资源使用指标（并行采集 stats 加速）"""
+        import concurrent.futures
+
         metrics = {}
         try:
             client = self._get_client()
             containers = client.containers.list()
+            targets = [c for c in containers if c.name in MONITORED_CONTAINERS]
 
-            for c in containers:
-                name = c.name
-                if name not in MONITORED_CONTAINERS:
-                    continue
-
+            def _collect_one(c):
+                """采集单个容器的指标（阻塞在 stats() 调用）"""
                 info = {
-                    "name": name,
+                    "name": c.name,
                     "status": c.status,
                     "image": c.image.tags[0] if c.image.tags else "unknown",
                 }
-
-                # 获取内存使用
                 if c.status == "running":
                     try:
                         stats = c.stats(stream=False)
@@ -442,8 +440,6 @@ class MonitorTrigger:
                         info["memory_percent"] = round(
                             (mem_usage / mem_limit * 100) if mem_limit else 0, 1
                         )
-
-                        # CPU 使用率
                         cpu_stats = stats.get("cpu_stats", {})
                         precpu_stats = stats.get("precpu_stats", {})
                         cpu_delta = (
@@ -472,7 +468,6 @@ class MonitorTrigger:
                     info["memory_percent"] = 0
                     info["cpu_percent"] = 0
 
-                # 端口映射
                 ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
                 port_list = []
                 for container_port, host_bindings in (ports or {}).items():
@@ -480,8 +475,18 @@ class MonitorTrigger:
                         for binding in host_bindings:
                             port_list.append(f"{binding.get('HostPort', '?')}→{container_port}")
                 info["ports"] = port_list
+                return c.name, info
 
-                metrics[name] = info
+            # 并行采集所有容器的 stats（每个 stats() 调用阻塞 ~1.5s）
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(targets) or 1) as ex:
+                futures = {ex.submit(_collect_one, c): c for c in targets}
+                for fut in concurrent.futures.as_completed(futures):
+                    try:
+                        name, info = fut.result()
+                        metrics[name] = info
+                    except Exception as e:
+                        c = futures[fut]
+                        metrics[c.name] = {"name": c.name, "status": "error", "error": str(e)}
 
         except Exception as e:
             metrics["_error"] = str(e)

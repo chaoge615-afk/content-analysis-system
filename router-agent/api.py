@@ -478,47 +478,50 @@ async def get_system_metrics():
             "query_stats": {},
         }
 
-        # 1. 容器指标（Docker SDK）
-        try:
-            metrics["containers"] = monitor_trigger.get_container_metrics()
-        except Exception as e:
-            metrics["containers"] = {"_error": str(e)}
+        # 三路并行采集：Docker stats / RAG / DuckDB（避免串行等待）
+        def _collect_containers():
+            try:
+                return monitor_trigger.get_container_metrics()
+            except Exception as e:
+                return {"_error": str(e)}
 
-        # 2. RAG 统计
-        try:
-            rag_url = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
-            resp = req_lib.get(f"{rag_url}/api/stats", timeout=5)
-            if resp.status_code == 200:
-                metrics["rag_stats"] = resp.json()
-        except Exception as e:
-            metrics["rag_stats"] = {"error": str(e)}
+        def _collect_rag():
+            try:
+                rag_url = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
+                resp = req_lib.get(f"{rag_url}/api/stats", timeout=5)
+                if resp.status_code == 200:
+                    return resp.json()
+                return {"error": f"HTTP {resp.status_code}"}
+            except Exception as e:
+                return {"error": str(e)}
 
-        # 3. SQL/数据库统计（通过 Text-to-SQL 查询，使用短超时）
-        try:
-            sql_url = os.getenv("SQL_SERVICE_URL", "http://localhost:8010")
-            resp = req_lib.post(
-                f"{sql_url}/query",
-                json={"question": "数据库各表的记录数量"},
-                timeout=15,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("success"):
-                    metrics["sql_stats"] = {"tables": data.get("result", [])}
-            # 视频总数
-            resp2 = req_lib.post(
-                f"{sql_url}/query",
-                json={"question": "知识库一共有多少个视频"},
-                timeout=15,
-            )
-            if resp2.status_code == 200:
-                data2 = resp2.json()
-                if data2.get("success") and data2.get("result"):
-                    metrics["sql_stats"]["total_videos"] = data2["result"]
-        except Exception as e:
-            metrics["sql_stats"] = {"error": str(e)}
+        def _collect_sql():
+            try:
+                conn = _get_db()
+                table_names = conn.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                ).fetchall()
+                tables = []
+                for (tname,) in table_names:
+                    try:
+                        cnt = conn.execute(f'SELECT COUNT(*) FROM "{tname}"').fetchone()[0]
+                        tables.append({"table": tname, "count": cnt})
+                    except Exception:
+                        tables.append({"table": tname, "count": -1})
+                video_meta_cnt = conn.execute("SELECT COUNT(*) FROM video_meta").fetchone()[0]
+                return {"tables": tables, "total_videos": video_meta_cnt}
+            except Exception as e:
+                return {"error": str(e)}
 
-        # 4. 查询统计
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            f_containers = ex.submit(_collect_containers)
+            f_rag = ex.submit(_collect_rag)
+            f_sql = ex.submit(_collect_sql)
+            metrics["containers"] = f_containers.result()
+            metrics["rag_stats"] = f_rag.result()
+            metrics["sql_stats"] = f_sql.result()
+
+        # 4. 查询统计（纯内存，很快）
         try:
             metrics["query_stats"] = query_logger.get_stats()
         except Exception as e:
