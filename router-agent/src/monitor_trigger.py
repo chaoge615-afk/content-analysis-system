@@ -49,33 +49,62 @@ class MonitorTrigger:
     def check_cookie(self) -> dict:
         """
         预检 Cookie 配置是否可用
+        优先级：持久化文件 > 环境变量
         返回 { ok: bool, message: str }
         """
+        # 1. 检查持久化文件（前端保存的 Cookie）
+        cookie_file = os.path.join(
+            os.path.dirname(os.getenv("DUCKDB_PATH", "data/content.db")),
+            "bilibili_cookie.txt",
+        )
+        if os.path.exists(cookie_file):
+            try:
+                with open(cookie_file, encoding="utf-8") as f:
+                    content = f.read().strip()
+                if "SESSDATA" in content or "DedeUserID" in content:
+                    return {
+                        "ok": True,
+                        "message": "Cookie 已配置（前端保存），文件: bilibili_cookie.txt",
+                        "source": "file",
+                    }
+            except Exception:
+                pass
+            return {
+                "ok": False,
+                "message": "Cookie 文件存在但内容无效，请重新配置",
+                "source": "file",
+            }
+
+        # 2. 检查环境变量
         cookie_val = os.getenv("BILIBILI_COOKIE", "")
         if not cookie_val:
             return {
                 "ok": False,
-                "message": "环境变量 BILIBILI_COOKIE 未设置。请在 .env 中配置 BILIBILI_COOKIE（Cookie 文件路径或内容）",
+                "message": "Cookie 未配置。请通过上方输入框粘贴 Cookie，或在 .env 中设置 BILIBILI_COOKIE",
+                "source": "none",
             }
 
-        # 如果是文件路径，检查文件是否存在
+        # 环境变量是文件路径
         cookie_path = os.path.expanduser(cookie_val)
         if os.path.exists(cookie_path):
             return {
                 "ok": True,
-                "message": f"Cookie 文件就绪: {os.path.basename(cookie_path)}",
+                "message": f"Cookie 已配置（环境变量文件）: {os.path.basename(cookie_path)}",
+                "source": "env_file",
             }
 
-        # 不是路径，检查是否像 Netscape cookie 内容（至少包含 SESSDATA 或 DedeUserID）
+        # 环境变量是 cookie 内容
         if "SESSDATA" in cookie_val or "DedeUserID" in cookie_val:
             return {
                 "ok": True,
-                "message": "Cookie 内容已配置（环境变量），启动时将自动写入容器",
+                "message": "Cookie 已配置（环境变量内容），启动时将自动写入容器",
+                "source": "env_content",
             }
 
         return {
             "ok": False,
             "message": "BILIBILI_COOKIE 已设置但内容无效（不是文件路径，也不包含 SESSDATA/DedeUserID）",
+            "source": "env",
         }
 
     def trigger(self, params: Optional[dict] = None) -> dict:
@@ -186,6 +215,7 @@ class MonitorTrigger:
                 "docker_available": self.is_available,
                 "cookie_ok": cookie_check["ok"],
                 "cookie_message": cookie_check["message"],
+                "cookie_source": cookie_check.get("source", "none"),
             }
 
         # 如果运行中，尝试更新日志
@@ -198,6 +228,7 @@ class MonitorTrigger:
             "docker_available": self.is_available,
             "cookie_ok": cookie_check["ok"],
             "cookie_message": cookie_check["message"],
+            "cookie_source": cookie_check.get("source", "none"),
         }
 
     def _find_monitor_image(self, client) -> Optional[str]:
@@ -229,7 +260,7 @@ class MonitorTrigger:
     def _build_env(self, params: dict) -> dict:
         """构建容器环境变量（从 router-agent 自身环境变量透传）"""
         env_keys = [
-            "BILIBILI_COOKIE", "QQ_BOT_URL", "QQ_USER_ID",
+            "QQ_BOT_URL", "QQ_USER_ID",
             "SILICONFLOW_API_KEY", "EMBEDDING_API_KEY",
             "REFINE_API_URL", "REFINE_API_KEY",
             "WHISPER_DEVICE", "WHISPER_MODEL", "COMPUTE_TYPE",
@@ -239,6 +270,20 @@ class MonitorTrigger:
             val = os.getenv(key)
             if val:
                 env[key] = val
+
+        # Cookie：优先使用持久化文件（共享卷），否则透传环境变量
+        cookie_file = os.path.join(
+            os.path.dirname(os.getenv("DUCKDB_PATH", "data/content.db")),
+            "bilibili_cookie.txt",
+        )
+        if os.path.exists(cookie_file):
+            # 容器内 duckdb-data 挂载在 /app/data，所以路径是 /app/data/bilibili_cookie.txt
+            env["BILIBILI_COOKIE"] = "/app/data/bilibili_cookie.txt"
+        else:
+            # 透传环境变量
+            cookie_env = os.getenv("BILIBILI_COOKIE", "")
+            if cookie_env:
+                env["BILIBILI_COOKIE"] = cookie_env
 
         # 固定配置
         env["DATABASE_PATH"] = "/app/data/content.db"

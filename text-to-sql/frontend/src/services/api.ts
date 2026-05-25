@@ -50,6 +50,7 @@ export interface TriggerStatusResponse {
   docker_available: boolean;
   cookie_ok?: boolean;
   cookie_message?: string;
+  cookie_source?: string;   // "file" | "env_file" | "env_content" | "env" | "none"
 }
 
 export interface QueryLogItem {
@@ -226,6 +227,45 @@ export async function getSystemMetrics(): Promise<SystemMetricsResponse | null> 
     return response.data;
   } catch {
     return null;
+  }
+}
+
+// ============ Cookie 管理 API ============
+
+/** Cookie 状态响应 */
+export interface CookieStatusResponse {
+  ok: boolean;
+  message: string;
+  source?: string;
+}
+
+/** 获取 Cookie 状态 */
+export async function getCookieStatus(): Promise<CookieStatusResponse> {
+  try {
+    const response = await api.get<CookieStatusResponse>('/api/cookie');
+    return response.data;
+  } catch {
+    return { ok: false, message: '无法获取 Cookie 状态', source: 'none' };
+  }
+}
+
+/** 保存 Cookie */
+export async function saveCookie(content: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const response = await api.post('/api/cookie', { content });
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+/** 删除 Cookie */
+export async function deleteCookie(): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const response = await api.delete('/api/cookie');
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
   }
 }
 

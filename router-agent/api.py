@@ -77,6 +77,10 @@ class TriggerRequest(BaseModel):
     up_names: Optional[list] = None    # 指定 UP 主列表（可选，多选）
 
 
+class CookieRequest(BaseModel):
+    content: str  # Netscape 格式的 Cookie 内容
+
+
 # ============ 核心问答接口 ============
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -261,6 +265,49 @@ async def get_categories():
         return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
+
+
+# ============ Cookie 管理 ============
+
+COOKIE_FILE = os.path.join(os.path.dirname(os.getenv("DUCKDB_PATH", "data/content.db")), "bilibili_cookie.txt")
+
+
+@app.post("/api/cookie")
+async def set_cookie(req: CookieRequest):
+    """保存 Cookie（Netscape 格式内容写入共享卷）"""
+    content = req.content.strip()
+    if not content:
+        return {"success": False, "error": "Cookie 内容不能为空"}
+
+    # 基本校验：Netscape 格式至少包含 SESSDATA 或 DedeUserID
+    if "SESSDATA" not in content and "DedeUserID" not in content:
+        return {"success": False, "error": "Cookie 内容无效（缺少 SESSDATA 或 DedeUserID）"}
+
+    try:
+        os.makedirs(os.path.dirname(COOKIE_FILE), exist_ok=True)
+        with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"success": True, "message": "Cookie 已保存"}
+    except Exception as e:
+        return {"success": False, "error": f"保存失败: {e}"}
+
+
+@app.get("/api/cookie")
+async def get_cookie_status():
+    """Cookie 状态（是否已配置 + 来源）"""
+    return monitor_trigger.check_cookie()
+
+
+@app.delete("/api/cookie")
+async def delete_cookie():
+    """删除已保存的 Cookie"""
+    try:
+        if os.path.exists(COOKIE_FILE):
+            os.remove(COOKIE_FILE)
+            return {"success": True, "message": "Cookie 已删除"}
+        return {"success": True, "message": "Cookie 文件不存在（无需删除）"}
+    except Exception as e:
+        return {"success": False, "error": f"删除失败: {e}"}
 
 
 # ============ 健康检查 ============

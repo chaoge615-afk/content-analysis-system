@@ -3,6 +3,8 @@ import {
   triggerMonitor,
   getTriggerStatus,
   getUpList,
+  saveCookie,
+  deleteCookie,
   TriggerStatusResponse,
   UpInfo,
 } from '../services/api';
@@ -16,6 +18,14 @@ export default function MonitorTrigger() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState('');
+
+  // Cookie 管理
+  const [cookieOpen, setCookieOpen] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [cookieSaving, setCookieSaving] = useState(false);
+  const [cookieMsg, setCookieMsg] = useState('');
+  const [cookieMsgType, setCookieMsgType] = useState<'ok' | 'err'>('ok');
+
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -24,14 +34,8 @@ export default function MonitorTrigger() {
   useEffect(() => {
     setUpListLoading(true);
     getUpList()
-      .then((data) => {
-        console.log('[MonitorTrigger] UP主列表:', data);
-        setUpList(data);
-      })
-      .catch((err) => {
-        console.error('[MonitorTrigger] 加载UP主列表失败:', err);
-        setUpList([]);
-      })
+      .then(setUpList)
+      .catch(() => setUpList([]))
       .finally(() => setUpListLoading(false));
   }, []);
 
@@ -73,6 +77,13 @@ export default function MonitorTrigger() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cookie 未配置时自动展开
+  useEffect(() => {
+    if (status && status.cookie_ok === false && !cookieOpen) {
+      setCookieOpen(true);
+    }
+  }, [status?.cookie_ok]);
+
   const fetchStatus = async () => {
     const data = await getTriggerStatus();
     setStatus(data);
@@ -80,14 +91,43 @@ export default function MonitorTrigger() {
 
   const toggleUp = (name: string) => {
     setSelectedUps((prev) =>
-      prev.includes(name)
-        ? prev.filter((n) => n !== name)
-        : [...prev, name]
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
   };
 
-  const clearSelection = () => {
-    setSelectedUps([]);
+  const handleSaveCookie = async () => {
+    if (!cookieInput.trim()) {
+      setCookieMsg('请输入 Cookie 内容');
+      setCookieMsgType('err');
+      return;
+    }
+    setCookieSaving(true);
+    setCookieMsg('');
+    const result = await saveCookie(cookieInput);
+    if (result.success) {
+      setCookieMsg(result.message || 'Cookie 已保存');
+      setCookieMsgType('ok');
+      setCookieInput('');
+      fetchStatus();
+    } else {
+      setCookieMsg(result.error || '保存失败');
+      setCookieMsgType('err');
+    }
+    setCookieSaving(false);
+  };
+
+  const handleDeleteCookie = async () => {
+    setCookieSaving(true);
+    const result = await deleteCookie();
+    if (result.success) {
+      setCookieMsg(result.message || 'Cookie 已删除');
+      setCookieMsgType('ok');
+      fetchStatus();
+    } else {
+      setCookieMsg(result.error || '删除失败');
+      setCookieMsgType('err');
+    }
+    setCookieSaving(false);
   };
 
   const handleTrigger = async () => {
@@ -136,6 +176,127 @@ export default function MonitorTrigger() {
           <span className="text-xs text-gray-400">
             {new Date(task.started_at).toLocaleString('zh-CN')}
           </span>
+        )}
+      </div>
+
+      {/* Docker 不可用提示 */}
+      {status && !status.docker_available && (
+        <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded">
+          Docker 不可用，请确认 Docker socket 已正确挂载
+        </div>
+      )}
+
+      {/* Cookie 管理区域 */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => setCookieOpen(!cookieOpen)}
+          className="w-full px-3 py-2 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                status?.cookie_ok ? 'bg-green-400' : 'bg-red-400'
+              }`}
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Cookie 设置
+            </span>
+            {status?.cookie_ok && (
+              <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                已配置
+              </span>
+            )}
+            {!status?.cookie_ok && (
+              <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                未配置
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-xs">{cookieOpen ? '收起' : '展开'}</span>
+        </button>
+
+        {cookieOpen && (
+          <div className="px-3 py-3 space-y-2 border-t border-gray-200">
+            {/* Cookie 状态描述 */}
+            {status?.cookie_message && (
+              <div
+                className={`text-xs px-2 py-1.5 rounded ${
+                  status.cookie_ok
+                    ? 'text-green-700 bg-green-50'
+                    : 'text-red-700 bg-red-50'
+                }`}
+              >
+                {status.cookie_message}
+              </div>
+            )}
+
+            {/* Cookie 输入 */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-gray-500">
+                  粘贴 B站 Cookie（Netscape 格式）
+                </label>
+                <button
+                  onClick={() =>
+                    window.open(
+                      'https://www.bilibili.com',
+                      '_blank'
+                    )
+                  }
+                  className="text-xs text-blue-500 hover:text-blue-700"
+                >
+                  打开 B站 ↗
+                </button>
+              </div>
+              <textarea
+                value={cookieInput}
+                onChange={(e) => setCookieInput(e.target.value)}
+                placeholder={"从浏览器开发者工具 → Application → Cookies → 导出 Netscape 格式\n或直接粘贴包含 SESSDATA、bili_jct 等字段的 Cookie 内容"}
+                rows={5}
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-xs font-mono
+                           focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y"
+              />
+              <div className="text-xs text-gray-400 mt-0.5">
+                获取方式：B站页面 → F12 → Application → Cookies → 用浏览器插件导出 Netscape 格式
+              </div>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveCookie}
+                disabled={cookieSaving || !cookieInput.trim()}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium
+                           hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
+                           transition-colors"
+              >
+                {cookieSaving ? '保存中...' : '保存 Cookie'}
+              </button>
+              {status?.cookie_ok && status?.cookie_source === 'file' && (
+                <button
+                  onClick={handleDeleteCookie}
+                  disabled={cookieSaving}
+                  className="px-3 py-1.5 border border-red-300 text-red-600 rounded text-xs
+                             hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                  删除已保存的 Cookie
+                </button>
+              )}
+            </div>
+
+            {/* 操作反馈 */}
+            {cookieMsg && (
+              <div
+                className={`text-xs px-2 py-1.5 rounded ${
+                  cookieMsgType === 'ok'
+                    ? 'text-green-700 bg-green-50'
+                    : 'text-red-700 bg-red-50'
+                }`}
+              >
+                {cookieMsg}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -199,7 +360,7 @@ export default function MonitorTrigger() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      clearSelection();
+                      setSelectedUps([]);
                     }}
                     className="text-xs text-gray-400 hover:text-gray-600 ml-1"
                   >
@@ -267,26 +428,6 @@ export default function MonitorTrigger() {
       {error && (
         <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
           {error}
-        </div>
-      )}
-
-      {/* Docker 不可用提示 */}
-      {status && !status.docker_available && (
-        <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded">
-          Docker 不可用，请确认 Docker socket 已正确挂载
-        </div>
-      )}
-
-      {/* Cookie 状态提示 */}
-      {status && status.cookie_ok === false && (
-        <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">
-          <div className="font-medium mb-1">Cookie 未配置</div>
-          <div className="text-xs text-red-500">{status.cookie_message}</div>
-          <div className="text-xs text-gray-500 mt-1">
-            请在项目根目录 <code className="bg-red-100 px-1 rounded">.env</code> 中设置
-            <code className="bg-red-100 px-1 rounded">BILIBILI_COOKIE</code>，
-            值为 Cookie 文件路径或 Netscape 格式内容
-          </div>
         </div>
       )}
 
