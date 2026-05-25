@@ -42,6 +42,18 @@ merger = ResultMerger()
 query_logger = QueryLogger()
 monitor_trigger = MonitorTrigger()
 
+# DuckDB 只读连接（复用，避免每次请求都 connect/close 的 20ms 开销）
+_db_conn = None
+
+def _get_db():
+    """获取 DuckDB 只读连接（惰性初始化，进程内复用）"""
+    global _db_conn
+    if _db_conn is None:
+        import duckdb as _duckdb
+        db_path = os.getenv("DUCKDB_PATH", "data/content.db")
+        _db_conn = _duckdb.connect(db_path, read_only=True)
+    return _db_conn
+
 
 # ============ 请求/响应模型 ============
 
@@ -179,9 +191,7 @@ async def get_status():
 async def get_up_list():
     """UP 主列表（从 DuckDB 读取，优先 up_info，回退 video_meta 聚合）"""
     try:
-        import duckdb as _duckdb
-        db_path = os.getenv("DUCKDB_PATH", "data/content.db")
-        conn = _duckdb.connect(db_path, read_only=True)
+        conn = _get_db()
 
         # 优先从 up_info 表读取
         up_count = conn.execute("SELECT COUNT(*) FROM up_info").fetchone()[0]
@@ -189,7 +199,6 @@ async def get_up_list():
             rows = conn.execute(
                 "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
             ).fetchall()
-            conn.close()
             return {
                 "success": True,
                 "data": [
@@ -206,7 +215,6 @@ async def get_up_list():
                GROUP BY up_name
                ORDER BY cnt DESC"""
         ).fetchall()
-        conn.close()
         return {
             "success": True,
             "data": [
@@ -222,10 +230,17 @@ async def get_up_list():
 async def get_recent():
     """最近采集视频（从 DuckDB video_meta 表读取）"""
     try:
-        result = dispatcher.query_sql("最近采集的10个视频")
-        if result.get("success"):
-            return {"success": True, "data": result.get("result", [])}
-        return {"success": False, "error": result.get("error", "查询失败"), "data": []}
+        conn = _get_db()
+        rows = conn.execute(
+            """SELECT bvid, up_name, title, publish_date, category, duration
+               FROM video_meta
+               ORDER BY created_at DESC LIMIT 10"""
+        ).fetchall()
+        data = [
+            {"bvid": r[0], "up_name": r[1], "title": r[2], "publish_date": str(r[3]) if r[3] else None, "category": r[4], "duration": r[5]}
+            for r in rows
+        ]
+        return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
 
@@ -234,10 +249,16 @@ async def get_recent():
 async def get_categories():
     """分类列表（31个情感分类 + 对应视频数）"""
     try:
-        result = dispatcher.query_sql("各分类的视频数量统计")
-        if result.get("success"):
-            return {"success": True, "data": result.get("result", [])}
-        return {"success": False, "error": result.get("error", "查询失败"), "data": []}
+        conn = _get_db()
+        rows = conn.execute(
+            """SELECT category, COUNT(*) as cnt
+               FROM video_meta
+               WHERE category IS NOT NULL AND category != ''
+               GROUP BY category
+               ORDER BY cnt DESC"""
+        ).fetchall()
+        data = [{"category": r[0], "count": r[1]} for r in rows]
+        return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
 
