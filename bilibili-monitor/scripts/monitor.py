@@ -34,42 +34,15 @@ def load_config(config_path: str) -> dict:
 
 # ─── Checkpoint 文件管理 ───────────────────────────────────────────
 
-def _checkpoint_path(config_path: str, suffix: str) -> Path:
-    """
-    生成 checkpoint 文件路径
-    suffix: '_downloaded' | '_done_bvid'
-    """
-    script_dir = Path(__file__).parent.resolve()
-    skill_root = script_dir.parent
-
-    # 配置文件名 → stem（去掉 .yaml 和所有空白）
-    stem_raw = Path(config_path).stem
-    stem_nospace = stem_raw.replace(' ', '').replace('\t', '').replace('_', '')
-    stem_orig = stem_raw.replace('\t', '')
-
-    # 扫描 data/ 目录下所有已存在的 checkpoint 文件
-    data_dir = skill_root / 'data'
-    if data_dir.exists():
-        for ck_file in data_dir.iterdir():
-            if not ck_file.name.endswith(suffix + '.txt'):
-                continue
-            # 去掉后缀和扩展名，得到 stem 部分
-            ck_stem = ck_file.name[:-len(suffix)-4]
-            # 统一小写后比较（大小写不敏感）
-            ck_norm = ck_stem.lower()
-            stem_norm = stem_nospace.lower()
-            if (ck_norm == stem_norm
-                    or ck_norm.replace(' ', '') == stem_norm.replace(' ', '')
-                    or ck_norm.replace('_', '') == stem_norm.replace('_', '')):
-                return ck_file
-
-    # 不存在就用默认规则
-    return data_dir / f'{stem_orig}{suffix}.txt'
+def _checkpoint_path(uid: str, suffix: str) -> Path:
+    """生成 checkpoint 文件路径（基于 UID，永久唯一）"""
+    data_dir = Path(__file__).parent.parent / 'data'
+    return data_dir / f'{uid}{suffix}.txt'
 
 
-def load_checkpoint(config_path: str, suffix: str) -> set:
+def load_checkpoint(uid: str, suffix: str) -> set:
     """加载已记录的 BVID 集合"""
-    ck_file = _checkpoint_path(config_path, suffix)
+    ck_file = _checkpoint_path(uid, suffix)
     ck_file = os.path.expanduser(ck_file)
     if not os.path.exists(ck_file):
         return set()
@@ -77,9 +50,9 @@ def load_checkpoint(config_path: str, suffix: str) -> set:
         return {line.strip() for line in f if line.strip()}
 
 
-def append_checkpoint(config_path: str, suffix: str, bvids: list):
+def append_checkpoint(uid: str, suffix: str, bvids: list):
     """追加 BVID 到 checkpoint 文件"""
-    ck_file = _checkpoint_path(config_path, suffix)
+    ck_file = _checkpoint_path(uid, suffix)
     ck_file = os.path.expanduser(ck_file)
     os.makedirs(os.path.dirname(ck_file), exist_ok=True)
     with open(ck_file, 'a', encoding='utf-8') as f:
@@ -87,9 +60,9 @@ def append_checkpoint(config_path: str, suffix: str, bvids: list):
             f.write(b + '\n')
 
 
-def already_in_checkpoint(config_path: str, suffix: str, bvid: str) -> bool:
+def already_in_checkpoint(uid: str, suffix: str, bvid: str) -> bool:
     """检查 BVID 是否已在指定 checkpoint 中"""
-    ck_set = load_checkpoint(config_path, suffix)
+    ck_set = load_checkpoint(uid, suffix)
     return bvid in ck_set
 
 
@@ -103,11 +76,11 @@ def format_video_info(v: dict) -> str:
 
 # ─── 核心流程 ──────────────────────────────────────────────────────
 
-def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: str = ""):
+def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
     """
     对已下载的 m4a 文件批量转写
     m4a_dir: m4a 文件所在目录
-    config_path: 配置文件路径（用于关联 done_bvid 文件）
+    uid: UP 主 UID（用于关联 checkpoint 文件）
     up_name: UP 主名称（用于按 UP 主分类转写输出）
 
     返回: (success_count, failed_count)
@@ -133,7 +106,7 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
             output_dir = None
 
     # 传入 done_bvid 文件路径，供 transcribe_local.py 预检跳过已转写的 m4a
-    done_bvid_file = _checkpoint_path(config_path, '_done_bvid')
+    done_bvid_file = _checkpoint_path(uid, '_done_bvid')
     if not os.path.exists(os.path.expanduser(done_bvid_file)):
         done_bvid_file = None
     else:
@@ -169,17 +142,17 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
             saved_bvids.append(m.group(1))
 
     # 下载 checkpoint 路径
-    dl_set = load_checkpoint(config_path, '_downloaded')
+    dl_set = load_checkpoint(uid, '_downloaded')
 
     if result.all_success:
         # 全部成功：把 downloaded 中这批 BVID 标记到 done_bvid
         success_count = len(saved_bvids)
         for bv in saved_bvids:
-            append_checkpoint(config_path, '_done_bvid', [bv])
+            append_checkpoint(uid, '_done_bvid', [bv])
         # 从 downloaded 中移除（已转写）
         if saved_bvids and dl_set:
             remaining = dl_set - set(saved_bvids)
-            dl_ck_path = os.path.expanduser(_checkpoint_path(config_path, '_downloaded'))
+            dl_ck_path = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
             with open(dl_ck_path, 'w') as f:
                 for bv in remaining:
                     f.write(bv + '\n')
@@ -190,7 +163,7 @@ def trigger_transcribe(m4a_dir: str, config: dict, config_path: str, up_name: st
         # 部分失败：只标记成功的
         success_count = len(saved_bvids)
         for bv in saved_bvids:
-            append_checkpoint(config_path, '_done_bvid', [bv])
+            append_checkpoint(uid, '_done_bvid', [bv])
         return success_count, result.failed
 
     # 异常情况
@@ -280,8 +253,8 @@ def main():
     print(f"✓ Cookie 有效（账号：{cookie_uname}）\n")
 
     # ── Checkpoint 初始化 ──
-    done_bvid_set  = load_checkpoint(args.config, '_done_bvid')
-    downloaded_set = load_checkpoint(args.config, '_downloaded')
+    done_bvid_set  = load_checkpoint(uid, '_done_bvid')
+    downloaded_set = load_checkpoint(uid, '_downloaded')
     is_new_up = (len(done_bvid_set) == 0 and len(downloaded_set) == 0)
     print(f"已处理视频数: {len(done_bvid_set)} (done_bvid), {len(downloaded_set)} (已下载待转写)")
     print(f"{'(新 UP，全量扫描)' if is_new_up else '(增量扫描)'}\n")
@@ -379,7 +352,7 @@ def main():
         if ok:
             newly_downloaded.append((bvid, title))
             # 下载成功后立即写入 downloaded checkpoint
-            append_checkpoint(args.config, '_downloaded', [bvid])
+            append_checkpoint(uid, '_downloaded', [bvid])
             print(f"  ✓ 完成 (已记入 downloaded)")
         else:
             print(f"  ✗ 失败")
@@ -394,18 +367,18 @@ def main():
     # ── 转写 ──
     if newly_downloaded and not args.no_transcribe:
         # 转写前预检：把 downloaded 中已在 done_bvid 的 BVID 移走（避免重复转写）
-        dl_set = load_checkpoint(args.config, '_downloaded')
-        done_set = load_checkpoint(args.config, '_done_bvid')
+        dl_set = load_checkpoint(uid, '_downloaded')
+        done_set = load_checkpoint(uid, '_done_bvid')
         already_done = dl_set & done_set
         if already_done:
             print(f"  [预检] 从 downloaded 移除 {len(already_done)} 个已转写 BVID")
             remaining = dl_set - already_done
-            dl_ck_path = os.path.expanduser(_checkpoint_path(args.config, '_downloaded'))
+            dl_ck_path = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
             with open(dl_ck_path, 'w') as f:
                 for bv in remaining:
                     f.write(bv + '\n')
 
-        transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, args.config, up_name)
+        transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, uid, up_name)
         print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
 
         # ── 精炼 + 入库（转写成功后） ──

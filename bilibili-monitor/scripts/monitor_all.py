@@ -7,6 +7,7 @@ import argparse
 import subprocess
 import sys
 import time
+import yaml
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
@@ -23,7 +24,6 @@ def find_all_configs():
 
 def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0):
     """运行单个配置的监控，返回 (name, success, new_count, message, output)"""
-    import yaml
     with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     name = cfg.get("name", config_path.stem)
@@ -169,8 +169,11 @@ def main():
     if not args.dry_run:
         print(f"\n🧹 清理 downloaded checkpoint...")
         for cfg in configs:
-            dl_file = SCRIPT_DIR.parent / "data" / f"{cfg.stem}_downloaded.txt"
-            done_file = SCRIPT_DIR.parent / "data" / f"{cfg.stem}_done_bvid.txt"
+            with open(cfg, encoding="utf-8") as f:
+                cfg_data = yaml.safe_load(f)
+            uid = cfg_data.get("uid", cfg.stem)
+            dl_file = SCRIPT_DIR.parent / "data" / f"{uid}_downloaded.txt"
+            done_file = SCRIPT_DIR.parent / "data" / f"{uid}_done_bvid.txt"
             if dl_file.exists():
                 dl_bvids = {l.strip() for l in dl_file.open() if l.strip()}
                 done_bvids = (
