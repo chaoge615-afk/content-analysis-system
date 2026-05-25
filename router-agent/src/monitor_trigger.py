@@ -271,15 +271,22 @@ class MonitorTrigger:
             if val:
                 env[key] = val
 
-        # Cookie：优先使用持久化文件（共享卷），否则透传环境变量
+        # Cookie：优先读取文件内容直接注入（避免 volume 名称不匹配导致容器找不到文件）
         cookie_file = os.path.join(
             os.path.dirname(os.getenv("DUCKDB_PATH", "data/content.db")),
             "bilibili_cookie.txt",
         )
         if os.path.exists(cookie_file):
-            # 容器内 duckdb-data 挂载在 /app/data，所以路径是 /app/data/bilibili_cookie.txt
-            env["BILIBILI_COOKIE"] = "/app/data/bilibili_cookie.txt"
-        else:
+            try:
+                with open(cookie_file, encoding="utf-8") as f:
+                    cookie_content = f.read().strip()
+                if cookie_content:
+                    # 直接传内容，cookie_utils 会写入容器文件再解析
+                    env["BILIBILI_COOKIE"] = cookie_content
+            except Exception:
+                pass
+
+        if "BILIBILI_COOKIE" not in env:
             # 透传环境变量
             cookie_env = os.getenv("BILIBILI_COOKIE", "")
             if cookie_env:
