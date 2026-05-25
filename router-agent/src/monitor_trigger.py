@@ -206,7 +206,13 @@ class MonitorTrigger:
         cmd = ["python", "scripts/monitor_all.py"]
         if params.get("max_videos"):
             cmd.extend(["--max-videos", str(params["max_videos"])])
-        if params.get("up_name"):
+        # 支持多选 UP主（up_names 列表）
+        up_names = params.get("up_names")
+        if up_names:
+            cmd.append("--up")
+            cmd.extend(up_names)
+        elif params.get("up_name"):
+            # 向后兼容旧的单值参数
             cmd.extend(["--up", params["up_name"]])
         return cmd
 

@@ -108,7 +108,7 @@ def main():
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
     parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     parser.add_argument('--max-videos', type=int, default=0, help='每个UP最多处理视频数（0=不限制）')
-    parser.add_argument('--up', help='只运行指定UP主（配置名，如 an Jiajia）')
+    parser.add_argument('--up', nargs='+', help='只运行指定UP主（支持多个，模糊匹配）')
     args = parser.parse_args()
 
     configs = find_all_configs()
@@ -117,9 +117,9 @@ def main():
         sys.exit(1)
 
     if args.up:
-        configs = [c for c in configs if args.up in c.stem]
+        configs = [c for c in configs if any(name in c.stem for name in args.up)]
         if not configs:
-            print(f"❌ 没有找到包含 '{args.up}' 的配置文件")
+            print(f"❌ 没有找到匹配 {args.up} 的配置文件")
             sys.exit(1)
 
     print(f"{'='*60}")

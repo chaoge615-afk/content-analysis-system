@@ -2,17 +2,27 @@ import { useState, useEffect, useRef } from 'react';
 import {
   triggerMonitor,
   getTriggerStatus,
+  getUpList,
   TriggerStatusResponse,
+  UpInfo,
 } from '../services/api';
 
 export default function MonitorTrigger() {
   const [status, setStatus] = useState<TriggerStatusResponse | null>(null);
   const [maxVideos, setMaxVideos] = useState('');
-  const [upName, setUpName] = useState('');
+  const [selectedUps, setSelectedUps] = useState<string[]>([]);
+  const [upList, setUpList] = useState<UpInfo[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState('');
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 加载 UP主 列表
+  useEffect(() => {
+    getUpList().then(setUpList);
+  }, []);
 
   useEffect(() => {
     fetchStatus();
@@ -41,9 +51,32 @@ export default function MonitorTrigger() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [status?.task?.logs?.length]);
 
+  // 点击外部关闭下拉
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchStatus = async () => {
     const data = await getTriggerStatus();
     setStatus(data);
+  };
+
+  const toggleUp = (name: string) => {
+    setSelectedUps((prev) =>
+      prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name]
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedUps([]);
   };
 
   const handleTrigger = async () => {
@@ -51,7 +84,7 @@ export default function MonitorTrigger() {
     setError('');
     const params: Record<string, any> = {};
     if (maxVideos) params.max_videos = parseInt(maxVideos, 10);
-    if (upName) params.up_name = upName;
+    if (selectedUps.length > 0) params.up_names = selectedUps;
 
     const result = await triggerMonitor(params);
     if (!result.success) {
@@ -96,44 +129,123 @@ export default function MonitorTrigger() {
       </div>
 
       {/* 触发参数 */}
-      <div className="flex gap-2 items-end">
-        <div className="flex-1">
-          <label className="block text-xs text-gray-500 mb-1">
-            最大视频数（可选）
-          </label>
-          <input
-            type="number"
-            value={maxVideos}
-            onChange={(e) => setMaxVideos(e.target.value)}
-            placeholder="不限制"
-            disabled={isRunning}
-            className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm
-                       focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
-          />
+      <div className="space-y-3">
+        {/* 最大视频数 */}
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="block text-xs text-gray-500 mb-1">
+              最大视频数（可选）
+            </label>
+            <input
+              type="number"
+              value={maxVideos}
+              onChange={(e) => setMaxVideos(e.target.value)}
+              placeholder="不限制"
+              disabled={isRunning}
+              className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm
+                         focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+            />
+          </div>
         </div>
-        <div className="flex-1">
+
+        {/* UP主多选 */}
+        <div className="relative" ref={dropdownRef}>
           <label className="block text-xs text-gray-500 mb-1">
-            指定UP主（可选）
+            指定 UP主（可选，不选则全部）
           </label>
-          <input
-            type="text"
-            value={upName}
-            onChange={(e) => setUpName(e.target.value)}
-            placeholder="全部UP主"
-            disabled={isRunning}
-            className="w-full px-2.5 py-1.5 border border-gray-200 rounded text-sm
-                       focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
-          />
+
+          {/* 选中项展示区 */}
+          <div
+            onClick={() => !isRunning && setDropdownOpen(!dropdownOpen)}
+            className={`min-h-[38px] px-2.5 py-1.5 border rounded text-sm flex flex-wrap gap-1.5 items-center cursor-pointer
+              ${dropdownOpen ? 'border-blue-400 ring-1 ring-blue-400' : 'border-gray-200'}
+              ${isRunning ? 'bg-gray-50 cursor-not-allowed' : 'hover:border-gray-300'}`}
+          >
+            {selectedUps.length === 0 ? (
+              <span className="text-gray-400">全部 UP主</span>
+            ) : (
+              <>
+                {selectedUps.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs"
+                  >
+                    {name}
+                    {!isRunning && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleUp(name);
+                        }}
+                        className="hover:text-blue-900 font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {!isRunning && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearSelection();
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600 ml-1"
+                  >
+                    清空
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* 下拉选项 */}
+          {dropdownOpen && !isRunning && (
+            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-52 overflow-y-auto">
+              {upList.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                  暂无 UP主 数据
+                </div>
+              ) : (
+                upList.map((up) => (
+                  <label
+                    key={up.uid}
+                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUps.includes(up.name)}
+                      onChange={() => toggleUp(up.name)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="flex-1">{up.name}</span>
+                    <span className="text-xs text-gray-400">
+                      {up.total_videos} 个视频
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          )}
         </div>
-        <button
-          onClick={handleTrigger}
-          disabled={isRunning || triggering || !status?.docker_available}
-          className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium
-                     hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
-                     transition-colors whitespace-nowrap"
-        >
-          {triggering ? '启动中...' : isRunning ? '运行中' : '开始采集'}
-        </button>
+
+        {/* 触发按钮 */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTrigger}
+            disabled={isRunning || triggering || !status?.docker_available}
+            className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium
+                       hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
+                       transition-colors whitespace-nowrap"
+          >
+            {triggering ? '启动中...' : isRunning ? '运行中' : '开始采集'}
+          </button>
+          {selectedUps.length > 0 && (
+            <span className="text-xs text-gray-500">
+              已选 {selectedUps.length} 个 UP主
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 错误提示 */}

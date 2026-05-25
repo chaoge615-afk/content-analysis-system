@@ -22,7 +22,14 @@ export interface SystemStatus {
 
 export interface TriggerParams {
   max_videos?: number;
-  up_name?: string;
+  up_names?: string[];
+}
+
+export interface UpInfo {
+  uid: string;
+  name: string;
+  total_videos: number;
+  last_update?: string | null;
 }
 
 export interface TriggerTask {
@@ -139,7 +146,7 @@ export async function getStatus(): Promise<SystemStatus | null> {
 }
 
 /** 获取 UP 主列表 */
-export async function getUpList(): Promise<any[]> {
+export async function getUpList(): Promise<UpInfo[]> {
   try {
     const response = await api.get('/api/up_list');
     return response.data?.data || [];

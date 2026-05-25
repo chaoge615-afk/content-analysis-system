@@ -62,7 +62,7 @@ class ChatResponse(BaseModel):
 
 class TriggerRequest(BaseModel):
     max_videos: Optional[int] = None   # 最大视频数限制
-    up_name: Optional[str] = None      # 指定 UP 主（可选）
+    up_names: Optional[list] = None    # 指定 UP 主列表（可选，多选）
 
 
 # ============ 核心问答接口 ============
@@ -177,14 +177,29 @@ async def get_status():
 
 @app.get("/api/up_list")
 async def get_up_list():
-    """UP 主列表（从 DuckDB up_info 表读取）"""
+    """UP 主列表（从 DuckDB up_info 表直接读取）"""
     try:
-        result = dispatcher.query_sql("列出所有UP主及其视频数量")
-        if result.get("success"):
-            return {"success": True, "data": result.get("result", [])}
-        return {"success": False, "error": result.get("error", "查询失败"), "data": []}
+        import duckdb as _duckdb
+        db_path = os.getenv("DUCKDB_PATH", "data/content.db")
+        conn = _duckdb.connect(db_path, read_only=True)
+        rows = conn.execute(
+            "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
+        ).fetchall()
+        conn.close()
+        data = [
+            {"uid": r[0], "name": r[1], "total_videos": r[2], "last_update": str(r[3]) if r[3] else None}
+            for r in rows
+        ]
+        return {"success": True, "data": data}
     except Exception as e:
-        return {"success": False, "error": str(e), "data": []}
+        # 回退：通过 text-to-sql 查询
+        try:
+            result = dispatcher.query_sql("列出所有UP主及其视频数量")
+            if result.get("success"):
+                return {"success": True, "data": result.get("result", [])}
+            return {"success": False, "error": str(e), "data": []}
+        except Exception as e2:
+            return {"success": False, "error": str(e2), "data": []}
 
 
 @app.get("/api/recent")
@@ -252,8 +267,8 @@ async def trigger_monitor(req: TriggerRequest):
     params = {}
     if req.max_videos:
         params["max_videos"] = req.max_videos
-    if req.up_name:
-        params["up_name"] = req.up_name
+    if req.up_names:
+        params["up_names"] = req.up_names
 
     result = monitor_trigger.trigger(params)
     return result
