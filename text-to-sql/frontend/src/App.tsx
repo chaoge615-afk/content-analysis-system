@@ -15,6 +15,7 @@ interface Message {
   sqlResult?: any[];
   reasoning?: string;
   responseTime?: number;
+  quickView?: { type: 'status' | 'up_list' | 'recent' | 'categories'; data: any };
   timestamp: Date;
 }
 
@@ -89,61 +90,46 @@ function App() {
     switch (cmd) {
       case '/status': {
         const status = await getStatus();
-        const text = status
-          ? `系统状态:\n- Router: ${status.router}\n- Text-to-SQL: ${status.text_to_sql}\n- RAG: ${status.rag}`
-          : '无法获取系统状态';
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',
-          content: text,
+          content: status
+            ? `系统状态: Router ${status.router} · Text-to-SQL ${status.text_to_sql} · RAG ${status.rag}`
+            : '无法获取系统状态',
+          quickView: { type: 'status', data: status },
           timestamp: new Date(),
         };
       }
 
       case '/up_list': {
         const data = await getUpList();
-        const text =
-          data.length > 0
-            ? `UP主列表 (${data.length}):\n` +
-              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
-            : '暂无 UP 主数据';
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',
-          content: text,
-          sqlResult: data,
+          content: data.length > 0 ? `UP主列表 (${data.length} 位)` : '暂无 UP 主数据',
+          quickView: { type: 'up_list', data },
           timestamp: new Date(),
         };
       }
 
       case '/recent': {
         const data = await getRecent();
-        const text =
-          data.length > 0
-            ? `最近视频 (${data.length}):\n` +
-              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
-            : '暂无视频数据';
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',
-          content: text,
-          sqlResult: data,
+          content: data.length > 0 ? `最近采集 (${data.length} 个视频)` : '暂无视频数据',
+          quickView: { type: 'recent', data },
           timestamp: new Date(),
         };
       }
 
       case '/categories': {
         const data = await getCategories();
-        const text =
-          data.length > 0
-            ? `分类统计 (${data.length}):\n` +
-              data.map((r: any) => `  - ${JSON.stringify(r)}`).join('\n')
-            : '暂无分类数据';
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',
-          content: text,
-          sqlResult: data,
+          content: data.length > 0 ? `分类统计 (${data.length} 个分类)` : '暂无分类数据',
+          quickView: { type: 'categories', data },
           timestamp: new Date(),
         };
       }
@@ -319,6 +305,7 @@ function App() {
                       sqlResult={msg.sqlResult}
                       reasoning={msg.reasoning}
                       responseTime={msg.responseTime}
+                      quickView={msg.quickView}
                     />
                   ))}
                   {loading && (

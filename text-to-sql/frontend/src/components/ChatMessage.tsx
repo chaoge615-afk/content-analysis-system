@@ -1,4 +1,5 @@
 import ResultTable from './ResultTable';
+import QuickView from './QuickView';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -8,6 +9,7 @@ interface ChatMessageProps {
   sqlResult?: any[];
   reasoning?: string;
   responseTime?: number;
+  quickView?: { type: 'status' | 'up_list' | 'recent' | 'categories'; data: any };
 }
 
 // 路由类型标签颜色和文字
@@ -26,6 +28,7 @@ export default function ChatMessage({
   sqlResult,
   reasoning,
   responseTime,
+  quickView,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const routeInfo = routeType ? ROUTE_LABELS[routeType] : null;
@@ -61,6 +64,13 @@ export default function ChatMessage({
           <div className="text-sm whitespace-pre-wrap leading-relaxed">
             {content}
           </div>
+
+          {/* 快捷指令结构化视图 */}
+          {!isUser && quickView && quickView.data && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <QuickView type={quickView.type} data={quickView.data} />
+            </div>
+          )}
 
           {/* 推理过程（可折叠） */}
           {!isUser && reasoning && (
