@@ -43,7 +43,7 @@ class SQLGenAgent:
             HumanMessage(content=user_content),
         ]
 
-        content = self.llm.invoke(messages)
+        content = self.llm.invoke(messages, cache_system=True)
 
         try:
             content = content.strip()

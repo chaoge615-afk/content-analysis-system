@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import Optional
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ pipeline = TextToSQLPipeline()
 
 class QueryRequest(BaseModel):
     question: str
+    pre_intent: Optional[dict] = None  # 来自 Router Agent 的预分类意图
 
 
 class QueryResponse(BaseModel):
@@ -44,7 +46,7 @@ class QueryResponse(BaseModel):
 async def query(request: QueryRequest):
     """Handle query request."""
     try:
-        result = pipeline.run(request.question)
+        result = pipeline.run(request.question, pre_intent=request.pre_intent)
         return QueryResponse(
             success=result.get("success", False),
             sql=result.get("sql"),

@@ -16,20 +16,31 @@ class QueryLogger:
     def __init__(self, db_path: Optional[str] = None):
         """
         初始化日志记录器
-        db_path: DuckDB 数据库路径，默认使用环境变量 DUCKDB_PATH
+        db_path: DuckDB 数据库路径，默认使用独立的 query_log.db（避免与 content.db 锁冲突）
         """
         if db_path is None:
-            db_path = os.getenv(
-                "DUCKDB_PATH",
-                str(Path(__file__).parent.parent.parent / "bilibili-monitor" / "data" / "content.db"),
+            # 使用独立的数据库文件，避免与 text-to-sql 锁冲突
+            data_dir = os.getenv(
+                "DATA_DIR",
+                str(Path(__file__).parent.parent.parent / "bilibili-monitor" / "data"),
             )
+            db_path = os.path.join(data_dir, "query_log.db")
         self.db_path = db_path
+        self._conn: Optional[duckdb.DuckDBPyConnection] = None
         self._ensure_table()
+
+    def _get_conn(self) -> duckdb.DuckDBPyConnection:
+        """获取 DuckDB 连接（query_log.db 仅被 router-agent 访问，可安全复用）"""
+        if self._conn is None:
+            # 确保数据目录存在
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            self._conn = duckdb.connect(self.db_path)
+        return self._conn
 
     def _ensure_table(self):
         """确保 query_log 表存在"""
         try:
-            conn = duckdb.connect(self.db_path)
+            conn = self._get_conn()
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS query_log (
                     id INTEGER PRIMARY KEY,
@@ -39,7 +50,6 @@ class QueryLogger:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.close()
         except Exception as e:
             print(f"[QueryLogger] 初始化 query_log 表失败: {e}")
 
@@ -58,7 +68,7 @@ class QueryLogger:
             response_time: 响应时间（秒）
         """
         try:
-            conn = duckdb.connect(self.db_path)
+            conn = self._get_conn()
             # 获取下一个 ID
             max_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM query_log").fetchone()[0]
             next_id = max_id + 1
@@ -70,7 +80,6 @@ class QueryLogger:
                 """,
                 [next_id, question[:500], route_type, round(response_time, 2), datetime.now()],
             )
-            conn.close()
         except Exception as e:
             # 日志记录失败不应影响主流程
             print(f"[QueryLogger] 记录查询日志失败: {e}")
@@ -78,12 +87,11 @@ class QueryLogger:
     def get_recent(self, limit: int = 20) -> list:
         """获取最近的查询记录"""
         try:
-            conn = duckdb.connect(self.db_path, read_only=True)
+            conn = self._get_conn()
             results = conn.execute(
                 "SELECT id, question, route_type, response_time, created_at FROM query_log ORDER BY created_at DESC LIMIT ?",
                 [limit],
             ).fetchall()
-            conn.close()
             return results
         except Exception as e:
             print(f"[QueryLogger] 查询日志失败: {e}")
@@ -104,7 +112,7 @@ class QueryLogger:
             { items, total, page, page_size, total_pages }
         """
         try:
-            conn = duckdb.connect(self.db_path, read_only=True)
+            conn = self._get_conn()
 
             # 构建 WHERE 条件
             where = ""
@@ -129,8 +137,6 @@ class QueryLogger:
                     LIMIT ? OFFSET ?""",
                 params + [page_size, offset],
             ).fetchall()
-
-            conn.close()
 
             items = [
                 {
@@ -157,7 +163,7 @@ class QueryLogger:
     def get_stats(self) -> dict:
         """获取查询统计"""
         try:
-            conn = duckdb.connect(self.db_path, read_only=True)
+            conn = self._get_conn()
             total = conn.execute("SELECT COUNT(*) FROM query_log").fetchone()[0]
             by_type = conn.execute(
                 "SELECT route_type, COUNT(*) as cnt FROM query_log GROUP BY route_type"
@@ -165,7 +171,6 @@ class QueryLogger:
             avg_time = conn.execute(
                 "SELECT AVG(response_time) FROM query_log"
             ).fetchone()[0]
-            conn.close()
             return {
                 "total_queries": total,
                 "by_route_type": {row[0]: row[1] for row in by_type if row[0]},

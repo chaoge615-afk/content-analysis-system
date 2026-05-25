@@ -29,7 +29,7 @@ class IntentAgent:
             HumanMessage(content=INTENT_USER_PROMPT.format(question=question)),
         ]
 
-        content = self.llm.invoke(messages)
+        content = self.llm.invoke(messages, cache_system=True)
 
         # Parse JSON from response
         try:

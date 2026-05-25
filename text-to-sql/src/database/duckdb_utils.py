@@ -55,7 +55,6 @@ def get_table_info(table_name: str) -> dict:
     """Get table schema information."""
     conn = get_connection()
     try:
-        # Get column info
         # DuckDB DESCRIBE 返回: (column_name, column_type, null, key, default, extra)
         columns = conn.execute(f"DESCRIBE {table_name}").fetchall()
         return {

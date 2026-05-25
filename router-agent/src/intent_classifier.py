@@ -180,17 +180,29 @@ class IntentClassifier:
             # 加载已知UP主名称列表
             up_names = self._load_up_names()
             up_names_text = "\n".join(f"- {name}" for name in up_names) if up_names else "（暂无数据）"
-            system_prompt = INTENT_CLASSIFY_PROMPT + f"""
+
+            # 使用 prompt caching：静态 prompt 缓存，动态 UP主 列表不缓存
+            system_blocks = [
+                {
+                    "type": "text",
+                    "text": INTENT_CLASSIFY_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {
+                    "type": "text",
+                    "text": f"""
 
 ## 已知UP主完整名称列表
 以下是从数据库中查询到的所有UP主完整名称。用户可能使用简称或昵称，你需要将其标准化为以下完整名称之一：
 
 {up_names_text}
-"""
+""",
+                },
+            ]
 
             response = self.client.messages.create(
                 model=self.model,
-                system=system_prompt,
+                system=system_blocks,
                 messages=[{"role": "user", "content": question}],
                 temperature=0.1,
                 max_tokens=500,

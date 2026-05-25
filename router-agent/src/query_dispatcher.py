@@ -17,13 +17,14 @@ class QueryDispatcher:
         self.rag_url = RAG_SERVICE_URL
         self.timeout = REQUEST_TIMEOUT
 
-    def query_sql(self, question: str, filters: Optional[dict] = None) -> dict:
+    def query_sql(self, question: str, filters: Optional[dict] = None, intent: Optional[dict] = None) -> dict:
         """
         发送到 Text-to-SQL 服务
 
         Args:
             question: 用户问题
             filters: 标准化后的过滤条件（up_name 等会被注入到问题中）
+            intent: Router 的完整意图对象（传给 T2S 跳过 IntentAgent）
 
         Returns:
             {
@@ -45,10 +46,15 @@ class QueryDispatcher:
             if hints:
                 enhanced_question = f"{question} {' '.join(hints)}"
 
+        # 构建请求 payload
+        payload: dict = {"question": enhanced_question}
+        if intent:
+            payload["pre_intent"] = intent
+
         try:
             resp = requests.post(
                 f"{self.sql_url}/query",
-                json={"question": enhanced_question},
+                json=payload,
                 timeout=self.timeout,
             )
             resp.raise_for_status()

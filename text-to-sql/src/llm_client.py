@@ -21,8 +21,13 @@ class MiniMaxLLM:
             base_url=MINIMAX_BASE_URL,
         )
 
-    def invoke(self, messages: List[Union[str, BaseMessage]]) -> str:
-        """Invoke the LLM with messages and return the response content."""
+    def invoke(self, messages: List[Union[str, BaseMessage]], cache_system: bool = False) -> str:
+        """Invoke the LLM with messages and return the response content.
+
+        Args:
+            messages: List of LangChain messages
+            cache_system: If True, add cache_control to system prompt for prompt caching
+        """
         # Convert langchain messages to Anthropic format
         system_msg = ""
         anthropic_messages = []
@@ -36,9 +41,20 @@ class MiniMaxLLM:
                     "content": msg.content
                 })
 
+        # Build system parameter with optional caching
+        system_param = system_msg
+        if cache_system and system_msg:
+            system_param = [
+                {
+                    "type": "text",
+                    "text": system_msg,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+
         response = self.client.messages.create(
             model=self.model,
-            system=system_msg,
+            system=system_param,
             messages=anthropic_messages,
             temperature=self.temperature,
             max_tokens=2048,

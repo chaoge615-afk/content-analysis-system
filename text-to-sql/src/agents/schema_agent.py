@@ -26,7 +26,7 @@ class SchemaAgent:
             HumanMessage(content=SCHEMA_USER_PROMPT.format(intent=json.dumps(intent, ensure_ascii=False))),
         ]
 
-        content = self.llm.invoke(messages)
+        content = self.llm.invoke(messages, cache_system=True)
 
         try:
             content = content.strip()

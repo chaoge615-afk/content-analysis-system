@@ -52,9 +52,81 @@ class TextToSQLPipeline:
             # LLM 失败时降级为简单拼接
             return f"查询结果：{result_str}"
 
-    def run(self, question: str) -> Dict[str, Any]:
+    # 静态 Schema（系统只有 2 张表，无需 LLM 调用）
+    STATIC_SCHEMA = {
+        "tables": [
+            {
+                "name": "video_meta",
+                "description": "视频元数据表",
+                "columns": ["bvid", "up_name", "up_uid", "title", "publish_date",
+                           "category", "duration", "summary", "tags", "created_at"]
+            },
+            {
+                "name": "up_info",
+                "description": "UP主信息表",
+                "columns": ["uid", "name", "total_videos", "last_update",
+                           "config_file", "created_at"]
+            },
+        ],
+        "joins": ["video_meta.up_uid = up_info.uid"],
+        "reasoning": "Static schema — only 2 tables in the system",
+    }
+
+    def _convert_router_intent(self, router_intent: dict, question: str) -> dict:
+        """将 Router Agent 的意图格式转换为 T2S IntentAgent 格式。
+
+        使用关键词启发式推断 query_target，无法推断时回退到 None（由 SQLGenAgent 自行判断）。
+        """
+        filters = router_intent.get("filters", {})
+
+        # 启发式推断 query_target
+        q = question.lower()
+        if any(kw in q for kw in ["几个", "多少", "数量", "统计", "共有", "一共", "总数"]):
+            query_target = "video_count"
+            aggregation = "count"
+        elif any(kw in q for kw in ["up主", "up 主", "博主", "有哪些人"]):
+            query_target = "up_info"
+            aggregation = "none"
+        elif any(kw in q for kw in ["分类", "各分类"]):
+            query_target = "category_stats"
+            aggregation = "count"
+        elif any(kw in q for kw in ["摘要", "总结", "内容", "聊了什么", "讲了什么"]):
+            query_target = "video_summary"
+            aggregation = "none"
+        else:
+            query_target = "video_list"
+            aggregation = "none"
+
+        # 转换 date_range
+        date_range = None
+        raw_date = filters.get("date_range", "")
+        if raw_date:
+            if "周" in str(raw_date) or "week" in str(raw_date).lower():
+                date_range = {"type": "this_week"}
+            elif "月" in str(raw_date) or "month" in str(raw_date).lower():
+                date_range = {"type": "this_month"}
+            elif "最近" in str(raw_date) or "recent" in str(raw_date).lower():
+                date_range = {"type": "recent"}
+
+        return {
+            "query_type": "video",
+            "query_target": query_target,
+            "filters": {
+                "up_name": filters.get("up_name"),
+                "category": filters.get("category"),
+                "date_range": date_range,
+            },
+            "aggregation": aggregation,
+            "limit": 10,
+        }
+
+    def run(self, question: str, pre_intent: Optional[dict] = None) -> Dict[str, Any]:
         """
         Run the full pipeline for a user question.
+
+        Args:
+            question: 用户问题
+            pre_intent: 来自 Router Agent 的预分类意图（可选，提供后跳过 IntentAgent）
 
         Returns:
             Dict with keys: success, sql, result, answer, error, iterations
@@ -66,8 +138,12 @@ class TextToSQLPipeline:
         while iterations < MAX_RETRIES:
             iterations += 1
 
-            # Step 1: Intent Understanding
-            intent = self.intent_agent.run(question)
+            # Step 1: Intent Understanding（有 pre_intent 时跳过 LLM 调用）
+            if pre_intent:
+                intent = self._convert_router_intent(pre_intent, question)
+                print(f"[Pipeline] 使用 Router 预分类意图: query_target={intent['query_target']}")
+            else:
+                intent = self.intent_agent.run(question)
             if "error" in intent:
                 return {
                     "success": False,
@@ -75,14 +151,8 @@ class TextToSQLPipeline:
                     "iterations": iterations,
                 }
 
-            # Step 2: Schema Retrieval
-            schema = self.schema_agent.run(intent)
-            if "error" in schema:
-                return {
-                    "success": False,
-                    "error": f"Schema retrieval failed: {schema['error']}",
-                    "iterations": iterations,
-                }
+            # Step 2: Schema Retrieval（使用静态 schema，跳过 LLM 调用）
+            schema = self.STATIC_SCHEMA
 
             # Step 3: SQL Generation（重试时传入上次错误作为提示）
             sql_result = self.sql_gen_agent.run(intent, schema, retry_hint=last_error)

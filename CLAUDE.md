@@ -13,6 +13,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - Cookie 注入修复：直接传内容而非文件路径（修复 volume 名不匹配问题）
   - 服务监控优化：SQL统计改DuckDB直查 + Docker stats并行采集（23s→2.2s）
   - 快捷指令美化：新增 QuickView 组件，结构化展示 status/up_list/recent/categories
+  - **Token 优化**：Prompt Caching 全面启用（90% 折扣）、消除冗余 LLM 调用（每次查询减少 2 次）、QueryLogger 独立数据库修复 DuckDB 锁冲突
 - 前端新增管理面板（Tab 切换：对话 / 管理面板）
 - router-agent 新增 Docker socket 挂载 + docker SDK（用于触发 bilibili-monitor 容器）
 - Docker 部署验证通过（5 个服务全部正常运行）

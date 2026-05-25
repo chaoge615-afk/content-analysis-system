@@ -170,18 +170,22 @@ class KnowledgeRAG:
             print(f"[RAG] video_knowledge 使用本地持久化: {video_persist_dir}")
 
     def _init_prompt(self):
-        """初始化 prompt 模板"""
-        prompt_template = """你是一个基于用户个人知识库的问答助手。
+        """初始化 prompt 模板（拆分为静态系统指令 + 动态用户内容）"""
+        # 静态系统指令（可缓存）
+        self.system_prompt = """你是一个基于用户个人知识库的问答助手。
 请根据提供的上下文信息回答用户的问题。如果上下文中没有找到答案，请直接说"我在知识库中没有找到相关内容"。
-不要编造信息，也不要引用无关内容。
+不要编造信息，也不要引用无关内容。"""
 
-上下文信息：
+        # 动态用户内容模板
+        self.user_template = """上下文信息：
 {context}
 
 用户问题：{question}
 
 回答："""
 
+        # 保留旧的 PromptTemplate 以兼容 DeepSeek 路径
+        prompt_template = self.system_prompt + "\n\n" + self.user_template
         self.prompt = PromptTemplate(
             template=prompt_template, input_variables=["context", "question"]
         )
@@ -325,13 +329,14 @@ class KnowledgeRAG:
 
         context = "\n\n---\n\n".join(context_parts)
 
-        # 生成 prompt
-        prompt_text = self.prompt.format(context=context, question=question)
+        # 生成动态用户内容
+        user_content = self.user_template.format(context=context, question=question)
 
         # 调用 LLM
         try:
             if self.llm_provider == "deepseek":
-                # DeepSeek（OpenAI SDK）
+                # DeepSeek（OpenAI SDK）— 不支持 prompt caching，保持原有方式
+                prompt_text = self.system_prompt + "\n\n" + user_content
                 response = self.llm.chat.completions.create(
                     model=self.llm_model,
                     max_tokens=2048,
@@ -340,12 +345,19 @@ class KnowledgeRAG:
                 )
                 content = response.choices[0].message.content if response.choices else ""
             else:
-                # MiniMax（Anthropic SDK）
+                # MiniMax（Anthropic SDK）— 使用 prompt caching
                 response = self.llm.messages.create(
                     model=self.llm_model,
                     max_tokens=2048,
                     temperature=0.1,
-                    messages=[{"role": "user", "content": prompt_text}],
+                    system=[
+                        {
+                            "type": "text",
+                            "text": self.system_prompt,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                    messages=[{"role": "user", "content": user_content}],
                 )
                 # 提取文本内容（过滤掉 ThinkingBlock 等非文本块）
                 text_parts = []
