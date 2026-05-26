@@ -2,11 +2,13 @@ import { useState } from 'react';
 import MonitorTrigger from './MonitorTrigger';
 import QueryLog from './QueryLog';
 import SystemMetrics from './SystemMetrics';
+import GpuTranscribe from './GpuTranscribe';
 
-type AdminTab = 'monitor' | 'query_log' | 'metrics';
+type AdminTab = 'monitor' | 'query_log' | 'metrics' | 'gpu';
 
 const TABS: { key: AdminTab; label: string; icon: string }[] = [
   { key: 'monitor', label: '采集触发', icon: '📡' },
+  { key: 'gpu', label: 'GPU转录', icon: '🎙️' },
   { key: 'query_log', label: '查询日志', icon: '📋' },
   { key: 'metrics', label: '服务监控', icon: '📊' },
 ];
@@ -37,6 +39,7 @@ export default function AdminPanel() {
       {/* Tab 内容 */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'monitor' && <MonitorTrigger />}
+        {activeTab === 'gpu' && <GpuTranscribe />}
         {activeTab === 'query_log' && <QueryLog />}
         {activeTab === 'metrics' && <SystemMetrics />}
       </div>

@@ -117,6 +117,73 @@ const api = axios.create({
   timeout: 120000,
 });
 
+// GPU 转录服务（运行在开发机 localhost:8011）
+const gpuApi = axios.create({
+  baseURL: 'http://localhost:8011',
+  timeout: 300000,
+});
+
+// ============ GPU 转录 API ============
+
+export interface GpuInfo {
+  cuda_available: boolean;
+  gpu_name: string | null;
+  gpu_memory_mb: number | null;
+  torch_version: string | null;
+  error: string | null;
+}
+
+export interface GpuTaskStatus {
+  status: 'idle' | 'running' | 'done' | 'error';
+  message: string;
+  started_at?: string;
+  finished_at?: string;
+  logs?: string[];
+  progress?: {
+    found: number;
+    success: number;
+    failed: number;
+    current: string;
+  };
+}
+
+export interface GpuStatusResponse {
+  success: boolean;
+  gpu: GpuInfo;
+  task: GpuTaskStatus;
+}
+
+/** 检测 GPU 状态 */
+export async function checkGpu(): Promise<GpuStatusResponse | null> {
+  try {
+    const resp = await gpuApi.get<GpuStatusResponse>('/api/gpu/status');
+    return resp.data;
+  } catch {
+    return null;  // GPU 服务不可达（NAS 等其他环境）
+  }
+}
+
+/** 触发 GPU 转录 */
+export async function triggerGpuTranscribe(
+  downloads: string,
+  transcripts: string,
+  modelSize: string = 'small',
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const resp = await gpuApi.post('/api/gpu/transcribe', {
+      downloads,
+      transcripts,
+      model_size: modelSize,
+    });
+    return resp.data;
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.response?.data?.error || error.message || 'GPU 服务请求失败',
+    };
+  }
+}
+
 // ============ Router Agent API ============
 
 /** 统一问答（对接 Router Agent） */
