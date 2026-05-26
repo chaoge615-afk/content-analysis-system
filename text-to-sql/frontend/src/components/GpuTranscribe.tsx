@@ -3,7 +3,6 @@ import {
   checkGpu,
   triggerGpuTranscribe,
   GpuStatusResponse,
-  GpuTaskStatus,
 } from '../services/api';
 
 export default function GpuTranscribe() {
