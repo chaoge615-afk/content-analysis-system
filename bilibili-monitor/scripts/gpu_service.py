@@ -25,6 +25,24 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
+# Windows: 确保 cublas64_12.dll 在 CTranslate2 包目录（CT2 只搜索自身目录）
+_dll_dir_handle = None
+if sys.platform == "win32":
+    try:
+        import nvidia.cublas
+        import ctranslate2
+        _cublas_bin = Path(nvidia.cublas.__path__[0]) / "bin"
+        _ct2_dir = Path(ctranslate2.__path__[0])
+        if _cublas_bin.is_dir() and _ct2_dir.is_dir():
+            for dll in _cublas_bin.glob("cublas*.dll"):
+                target = _ct2_dir / dll.name
+                if not target.exists():
+                    import shutil
+                    shutil.copy2(dll, target)
+            _dll_dir_handle = os.add_dll_directory(str(_cublas_bin))
+    except Exception:
+        pass
+
 # 确保 bilibili-monitor 目录可导入
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
