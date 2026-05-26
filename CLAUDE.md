@@ -5,6 +5,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 
 ## 当前状态（2026-05-26）
 - Phase 1-8 全部完成（133/133 任务）✅
+- Phase 9 进行中（混合转录架构：NAS下载 + 开发机GPU转录 + 飞牛Sync）
 - P0 完成：bilibili-monitor 全流程验证通过
 - P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
 - P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
@@ -47,7 +48,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
   - npm: 淘宝镜像 (`registry.npmmirror.com`)
 - **每次 Docker 镜像重建后，清理构建缓存**：`docker builder prune -a -f`（释放磁盘空间）
-- **每完成一个任务点，立即更新 `开发计划.md` 中的 checkbox，然后 git commit 并 push**
+- **每完成一个任务点，立即更新 `开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等），然后 git commit 并 push**
 - 完成开发后立即 push，避免本地未提交的改动与其他会话冲突
 
 ## 关键文件

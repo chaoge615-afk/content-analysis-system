@@ -22,7 +22,7 @@ fi
 
 # 执行 bilibili-monitor
 echo "[$TIMESTAMP] 执行 docker compose run bilibili-monitor..." >> "$LOG_FILE"
-docker compose -f "$PROJECT_DIR/docker-compose.yml" --profile nas run --rm bilibili-monitor >> "$LOG_FILE" 2>&1
+docker compose -f "$PROJECT_DIR/docker-compose.yml" --profile nas run --rm bilibili-monitor python scripts/monitor_all.py --no-transcribe >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
