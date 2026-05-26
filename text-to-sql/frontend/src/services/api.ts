@@ -168,12 +168,14 @@ export async function triggerGpuTranscribe(
   downloads: string,
   transcripts: string,
   modelSize: string = 'small',
+  device: string = 'cuda',
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
     const resp = await gpuApi.post('/api/gpu/transcribe', {
       downloads,
       transcripts,
       model_size: modelSize,
+      device,
     });
     return resp.data;
   } catch (error: any) {

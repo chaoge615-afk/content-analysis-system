@@ -14,10 +14,16 @@ GPU 转录服务 — 在开发机 (RTX 4060) 上运行的轻量 FastAPI 服务
 import argparse
 import os
 import sys
+import io
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+
+# Windows 终端 GBK 编码兼容：强制 stdout 使用 UTF-8
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 # 确保 bilibili-monitor 目录可导入
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -43,7 +49,7 @@ app.add_middleware(
 # ============ GPU 检测 ============
 
 def check_gpu() -> dict:
-    """检测 CUDA GPU 状态"""
+    """检测 CUDA GPU 状态（使用 CTranslate2，无需 PyTorch）"""
     result = {
         "cuda_available": False,
         "gpu_name": None,
@@ -52,17 +58,31 @@ def check_gpu() -> dict:
         "error": None,
     }
     try:
-        import torch
-        result["torch_version"] = torch.__version__
-        if torch.cuda.is_available():
+        import ctranslate2
+        result["torch_version"] = f"ctranslate2 {ctranslate2.__version__}"
+        # CTranslate2 支持列表
+        supported_compute = ctranslate2.get_supported_compute_types("cuda")
+        if supported_compute:
             result["cuda_available"] = True
-            result["gpu_name"] = torch.cuda.get_device_name(0)
-            props = torch.cuda.get_device_properties(0)
-            result["gpu_memory_mb"] = props.total_mem // (1024 * 1024)
+            result["gpu_name"] = "NVIDIA GPU (CUDA via CTranslate2)"
+            # 尝试用 nvidia-smi 获取显卡名和显存
+            try:
+                import subprocess
+                out = subprocess.check_output(
+                    ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+                    timeout=5, text=True, errors="replace",
+                )
+                parts = out.strip().split(",")
+                if len(parts) >= 2:
+                    result["gpu_name"] = parts[0].strip()
+                    mem_str = parts[1].strip().replace(" MiB", "")
+                    result["gpu_memory_mb"] = int(mem_str)
+            except Exception:
+                pass  # nvidia-smi 不可用时跳过
         else:
-            result["error"] = "CUDA 不可用（未检测到 NVIDIA GPU 或驱动）"
+            result["error"] = "CUDA 不可用（CTranslate2 未检测到 CUDA 支持）"
     except ImportError:
-        result["error"] = "未安装 PyTorch（GPU 服务需要 torch + CUDA）"
+        result["error"] = "未安装 CTranslate2（GPU 服务需要 ctranslate2 + faster-whisper）"
     except Exception as e:
         result["error"] = f"GPU 检测异常: {e}"
     return result
@@ -82,7 +102,7 @@ class TranscribeTask:
                 return {"status": "idle", "message": "无任务"}
             return dict(self._task)
 
-    def run(self, downloads: str, transcripts: str, model_size: str = "small"):
+    def run(self, downloads: str, transcripts: str, model_size: str = "small", device: str = "cuda"):
         """在新线程中执行转录"""
         with self._lock:
             if self._task and self._task.get("status") == "running":
@@ -94,13 +114,14 @@ class TranscribeTask:
                 "downloads": downloads,
                 "transcripts": transcripts,
                 "model_size": model_size,
+                "device": device,
                 "logs": [],
                 "progress": {"found": 0, "success": 0, "failed": 0, "current": ""},
             }
 
         thread = threading.Thread(
             target=self._execute,
-            args=(downloads, transcripts, model_size),
+            args=(downloads, transcripts, model_size, device),
             daemon=True,
         )
         thread.start()
@@ -118,7 +139,7 @@ class TranscribeTask:
             if self._task and "progress" in self._task:
                 self._task["progress"].update(kwargs)
 
-    def _execute(self, downloads: str, transcripts: str, model_size: str):
+    def _execute(self, downloads: str, transcripts: str, model_size: str, device: str):
         start_time = time.time()
         try:
             downloads_dir = Path(downloads).expanduser().resolve()
@@ -164,8 +185,9 @@ class TranscribeTask:
                 return
 
             # 加载模型
-            self._append_log(f"加载 Whisper 模型: {model_size} (CUDA, float16)")
-            model = WhisperModel(model_size, device="cuda", compute_type="float16")
+            compute_type = "float16" if device == "cuda" else "int8"
+            self._append_log(f"加载 Whisper 模型: {model_size} ({device}, {compute_type})")
+            model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
             success = 0
             failed = 0
@@ -206,13 +228,6 @@ class TranscribeTask:
                     success += 1
                     self._update_progress(success=success)
 
-                    # 释放显存
-                    try:
-                        import torch
-                        torch.cuda.empty_cache()
-                    except Exception:
-                        pass
-
                 except Exception as e:
                     self._append_log(f"  ❌ 失败: {e}")
                     failed += 1
@@ -244,6 +259,7 @@ class TranscribeRequest(BaseModel):
     downloads: str  # downloads 目录路径
     transcripts: str  # transcripts 目录路径
     model_size: str = "small"  # 模型大小
+    device: str = "cuda"  # 设备: cuda | cpu
 
 
 # ============ API 端点 ============
@@ -265,13 +281,14 @@ async def gpu_check():
 @app.post("/api/gpu/transcribe")
 async def gpu_transcribe(req: TranscribeRequest):
     """触发 GPU 转录"""
-    # 先确认 GPU 可用
-    gpu = check_gpu()
-    if not gpu["cuda_available"]:
-        return {
-            "success": False,
-            "error": f"GPU 不可用: {gpu.get('error', '未检测到 CUDA')}",
-        }
+    # 如果请求 cuda 模式，先确认 GPU 可用
+    if req.device == "cuda":
+        gpu = check_gpu()
+        if not gpu["cuda_available"]:
+            return {
+                "success": False,
+                "error": f"GPU 不可用: {gpu.get('error', '未检测到 CUDA')}，请改用 cpu 模式",
+            }
 
     if not req.downloads or not req.transcripts:
         return {
@@ -285,7 +302,7 @@ async def gpu_transcribe(req: TranscribeRequest):
             "error": f"downloads 目录不存在: {req.downloads}",
         }
 
-    return task_manager.run(req.downloads, req.transcripts, req.model_size)
+    return task_manager.run(req.downloads, req.transcripts, req.model_size, req.device)
 
 
 @app.get("/api/gpu/status")

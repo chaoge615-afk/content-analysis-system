@@ -11,6 +11,7 @@ export default function GpuTranscribe() {
   const [downloadsDir, setDownloadsDir] = useState('D:\\sync\\downloads');
   const [transcriptsDir, setTranscriptsDir] = useState('D:\\sync\\transcripts');
   const [modelSize, setModelSize] = useState('small');
+  const [device, setDevice] = useState('cuda');
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,7 +61,7 @@ export default function GpuTranscribe() {
     setError('');
     setTriggering(true);
     try {
-      const result = await triggerGpuTranscribe(downloadsDir, transcriptsDir, modelSize);
+      const result = await triggerGpuTranscribe(downloadsDir, transcriptsDir, modelSize, device);
       if (!result.success) {
         setError(result.error || '启动失败');
       } else {
@@ -161,7 +162,7 @@ export default function GpuTranscribe() {
         </div>
       </div>
 
-      {/* 模型选择 + 触发按钮 */}
+      {/* 模型选择 + 设备选择 + 触发按钮 */}
       <div className="flex items-center gap-3">
         <select
           value={modelSize}
@@ -175,11 +176,21 @@ export default function GpuTranscribe() {
           <option value="medium">medium (更高精度)</option>
         </select>
 
+        <select
+          value={device}
+          onChange={(e) => setDevice(e.target.value)}
+          className="px-2.5 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+          disabled={taskRunning}
+        >
+          <option value="cuda">CUDA (GPU)</option>
+          <option value="cpu">CPU</option>
+        </select>
+
         <button
           onClick={handleTrigger}
-          disabled={!gpu.cuda_available || taskRunning || triggering}
+          disabled={(device === 'cuda' && !gpu.cuda_available) || taskRunning || triggering}
           className={`px-4 py-1.5 text-sm font-medium rounded text-white transition-colors ${
-            !gpu.cuda_available || taskRunning
+            (device === 'cuda' && !gpu.cuda_available) || taskRunning
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
           }`}
