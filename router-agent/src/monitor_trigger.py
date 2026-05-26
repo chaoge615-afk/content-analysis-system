@@ -304,6 +304,8 @@ class MonitorTrigger:
         cmd = ["python", "scripts/monitor_all.py"]
         if params.get("max_videos"):
             cmd.extend(["--max-videos", str(params["max_videos"])])
+        if params.get("asr"):
+            cmd.append("--asr")
         # 支持多选 UP主（up_names 列表）
         up_names = params.get("up_names")
         if up_names:

@@ -76,15 +76,106 @@ def format_video_info(v: dict) -> str:
 
 # ─── 核心流程 ──────────────────────────────────────────────────────
 
-def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
+def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = "", force_asr: bool = False):
     """
     对已下载的 m4a 文件批量转写
     m4a_dir: m4a 文件所在目录
     uid: UP 主 UID（用于关联 checkpoint 文件）
     up_name: UP 主名称（用于按 UP 主分类转写输出）
+    force_asr: 强制使用云 ASR（覆盖配置文件设置）
 
     返回: (success_count, failed_count)
     """
+    # 检查是否使用云 ASR
+    asr_config = _load_asr_config()
+    use_asr = force_asr or asr_config.get("enabled", False)
+
+    if use_asr:
+        return _trigger_transcribe_asr(m4a_dir, config, uid, up_name)
+    else:
+        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+
+
+def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
+    """使用硅基流动云 ASR 转写"""
+    from transcribe_asr import process_directory_asr
+
+    api_key = os.getenv('SILICONFLOW_API_KEY', '')
+    if not api_key:
+        print("  ⚠️ 缺少 SILICONFLOW_API_KEY，无法使用云 ASR，回退到本地 Whisper")
+        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+
+    model = os.getenv('ASR_MODEL', 'FunAudioLLM/SenseVoiceSmall')
+
+    m4a_path = Path(m4a_dir)
+    output_dir = None
+    if config.get('transcribe_output_dir', ''):
+        # 按 UP 主名分子目录
+        up_safe = up_name.replace('/', '_').replace('\\', '_')
+        try:
+            output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            print(f"  ⚠️ 无法创建转写输出目录 {output_dir}，使用下载目录")
+            output_dir = None
+
+    transcripts_dir = output_dir or m4a_path
+
+    print(f"\n  转写 [云ASR]: 调用 process_directory_asr (目录: {m4a_dir})")
+    try:
+        result = process_directory_asr(
+            m4a_dir=str(m4a_path),
+            transcripts_dir=str(transcripts_dir),
+            uid=uid,
+            up_name=up_name,
+            api_key=api_key,
+            model=model,
+            min_duration=60,
+        )
+    except Exception as e:
+        print(f"  ⚠️ 云 ASR 转写异常: {e}")
+        return 0, 0
+
+    # ── 处理转写结果 ──
+    if result.found == 0:
+        print(f"  ⚠️ 没有需要转写的文件")
+        return 0, 0
+
+    # 从输出目录读取新生成的 .txt 文件，提取 BVID
+    import re
+    saved_bvids = []
+    scan_dir = transcripts_dir
+    for txt_file in Path(scan_dir).glob("*.txt"):
+        m = re.search(r'\[(BV[a-zA-Z0-9]+)\]\.txt$', txt_file.name)
+        if m:
+            saved_bvids.append(m.group(1))
+
+    # 下载 checkpoint 路径
+    dl_set = load_checkpoint(uid, '_downloaded')
+
+    if result.success > 0:
+        # 标记成功的 BVID 到 done_bvid
+        success_count = len(saved_bvids)
+        for bv in saved_bvids:
+            append_checkpoint(uid, '_done_bvid', [bv])
+        # 从 downloaded 中移除（已转写）
+        if saved_bvids and dl_set:
+            remaining = dl_set - set(saved_bvids)
+            dl_ck_path = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
+            with open(dl_ck_path, 'w') as f:
+                for bv in remaining:
+                    f.write(bv + '\n')
+        print(f"  ✅ 云 ASR 转写完成: {success_count} 个文件 (跳过 {result.skipped} 个)")
+        return success_count, result.failed
+
+    if result.failed > 0:
+        return 0, result.failed
+
+    return 0, 0
+
+
+def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
+    """使用本地 Whisper 转写（原有逻辑）"""
     from transcribe_local import process_directory
 
     model_size = os.getenv('WHISPER_MODEL', config.get('whisper_model', 'medium'))
@@ -170,6 +261,25 @@ def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
     return 0, 0
 
 
+def _load_asr_config() -> dict:
+    """加载 ASR 设置（从共享卷读取）"""
+    import json
+    data_dir = os.getenv("BILIBILI_DATA_DIR", "")
+    if not data_dir:
+        data_dir = str(Path(__file__).parent.parent / "data")
+
+    settings_file = Path(data_dir) / ".asr_config" / "settings.json"
+
+    if settings_file.exists():
+        try:
+            with open(settings_file, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    return {"enabled": False, "monthly_budget_minutes": 60}
+
+
 def notify_new_videos(up_name: str, videos: list, config: dict):
     """发送 QQ 通知"""
     notify_target = config.get('notify_target', '')
@@ -208,6 +318,7 @@ def main():
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
     parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     parser.add_argument('--max-videos', type=int, default=0, help='最多处理视频数（0=不限制）')
+    parser.add_argument('--asr', action='store_true', help='强制使用云 ASR 转写（覆盖配置文件设置）')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -378,7 +489,7 @@ def main():
                 for bv in remaining:
                     f.write(bv + '\n')
 
-        transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, uid, up_name)
+        transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
         print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
 
         # ── 精炼 + 入库（转写成功后） ──

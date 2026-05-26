@@ -359,6 +359,138 @@ export async function testCookie(): Promise<CookieTestResult> {
   }
 }
 
+// ============ UP主管理 API ============
+
+export interface UpInfoDetailed {
+  uid: string;
+  name: string;
+  whisper_model: string;
+  config_file: string;
+  has_video: boolean;
+  video_count?: number;
+  face?: string;
+}
+
+export interface UpResolveResult {
+  success: boolean;
+  uid?: string;
+  name?: string;
+  face?: string;
+  video_title?: string;
+  error?: string;
+}
+
+/** 解析 B站链接预览 UP主信息 */
+export async function resolveUpUrl(url: string): Promise<UpResolveResult> {
+  try {
+    const response = await api.get<UpResolveResult>('/api/up_info/resolve', { params: { url } });
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+/** 列出所有已配置的 UP主 */
+export async function listUps(): Promise<UpInfoDetailed[]> {
+  try {
+    const response = await api.get('/api/up_info');
+    return response.data?.data || [];
+  } catch {
+    return [];
+  }
+}
+
+/** 添加新 UP主 */
+export async function addUp(url: string, whisperModel: string = 'small'): Promise<{ success: boolean; up_info?: UpInfoDetailed; error?: string }> {
+  try {
+    const response = await api.post('/api/up_info', { url, whisper_model: whisperModel });
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+/** 删除 UP主 */
+export async function removeUp(uid: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const response = await api.delete(`/api/up_info/${uid}`);
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+// ============ ASR 转写 API ============
+
+export interface AsrSettings {
+  enabled: boolean;
+  monthly_budget_minutes: number;
+  model: string;
+}
+
+export interface AsrUsageRecord {
+  date: string;
+  timestamp: string;
+  up_name: string;
+  title: string;
+  duration_minutes: number;
+  bvid?: string;
+  cost: number;
+}
+
+export interface AsrUsage {
+  month: string;
+  total_minutes: number;
+  records: AsrUsageRecord[];
+}
+
+export interface AsrBudget {
+  ok: boolean;
+  used_minutes: number;
+  budget_minutes: number;
+  remaining_minutes: number;
+  message: string;
+}
+
+export interface AsrStatusResponse {
+  success: boolean;
+  data: {
+    settings: AsrSettings;
+    usage: AsrUsage;
+    budget: AsrBudget;
+  };
+}
+
+/** 获取 ASR 状态 */
+export async function getAsrStatus(): Promise<AsrStatusResponse | null> {
+  try {
+    const response = await api.get<AsrStatusResponse>('/api/asr/status');
+    return response.data;
+  } catch {
+    return null;
+  }
+}
+
+/** 更新 ASR 设置 */
+export async function updateAsrSettings(settings: { enabled?: boolean; monthly_budget_minutes?: number }): Promise<{ success: boolean; data?: AsrSettings; error?: string }> {
+  try {
+    const response = await api.post('/api/asr/settings', settings);
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
+/** 手动触发 ASR 转写 */
+export async function triggerAsrTranscribe(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await api.post('/api/asr/transcribe');
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '请求失败' };
+  }
+}
+
 // ============ 旧接口（向后兼容） ============
 
 export async function query(question: string): Promise<QueryResult> {

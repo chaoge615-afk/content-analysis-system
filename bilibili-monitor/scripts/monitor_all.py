@@ -22,7 +22,7 @@ def find_all_configs():
     return sorted(config_dir.glob("*.yaml"))
 
 
-def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0):
+def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False):
     """运行单个配置的监控，返回 (name, success, new_count, message, output)"""
     with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -35,6 +35,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
         "--no-transcribe" if no_transcribe else "",
         "--no-notify" if no_notify else "",
         "--metadata-only" if metadata_only else "",
+        "--asr" if force_asr else "",
         f"--max-videos={max_videos}" if max_videos > 0 else "",
     ]
     cmd = [c for c in cmd if c]
@@ -87,7 +88,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
     return name, proc.returncode == 0, new_count, msg, output
 
 
-def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0):
+def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False):
     """
     批量运行一组配置，同步等待全部完成。
     返回 [(name, success, new_count, msg, output), ...]
@@ -95,7 +96,7 @@ def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool
     results = []
     for cfg in configs:
         print(f"\n处理: {cfg.name} ...", end=" ", flush=True)
-        r = run_single(cfg, dry_run, no_transcribe, no_notify, metadata_only, max_videos)
+        r = run_single(cfg, dry_run, no_transcribe, no_notify, metadata_only, max_videos, force_asr)
         results.append(r)
         print("done")
     return results
@@ -109,6 +110,7 @@ def main():
     parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     parser.add_argument('--max-videos', type=int, default=0, help='每个UP最多处理视频数（0=不限制）')
     parser.add_argument('--up', nargs='+', help='只运行指定UP主（支持多个，模糊匹配）')
+    parser.add_argument('--asr', action='store_true', help='强制使用云 ASR 转写（覆盖配置文件设置）')
     args = parser.parse_args()
 
     configs = find_all_configs()
@@ -136,7 +138,10 @@ def main():
     print(f"{'='*60}")
     print(f"B站多UP主聚合监控")
     print(f"配置文件: {[c.name for c in configs]}")
-    print(f"模式: {'dry-run' if args.dry_run else '下载+转写'}")
+    mode = 'dry-run' if args.dry_run else '下载+转写'
+    if args.asr:
+        mode += ' (云ASR)'
+    print(f"模式: {mode}")
     print(f"{'='*60}")
 
     # ── 分批：下载阶段可以全量并行，转写阶段最多 MAX_CONCURRENT_TRANSCRIBE 个 UP 同时跑
@@ -156,7 +161,7 @@ def main():
             print(f"\n{'='*60}")
             print(f"第 {batch_idx}/{len(batched)} 批: {[c.name for c in batch]}")
             print(f"{'='*60}")
-        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify, args.metadata_only, args.max_videos)
+        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify, args.metadata_only, args.max_videos, args.asr)
         all_results.extend(batch_results)
 
         # 上一批与下一批之间稍作停顿，让 GPU 显存释放

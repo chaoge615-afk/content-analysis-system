@@ -123,6 +123,8 @@ services:
       - RAG_SERVICE_URL=http://rag:8090
       - DUCKDB_PATH=/app/data/content.db
       - DATA_DIR=/app/data  # QueryLogger 独立数据库路径
+      - BILIBILI_CONFIG_DIR=/app/bilibili-config  # UP主配置目录
+      - BILIBILI_DATA_DIR=/app/bilibili-data  # ASR 设置/用量存储
       # 透传 bilibili-monitor 所需环境变量（用于触发采集）
       - BILIBILI_COOKIE=${BILIBILI_COOKIE}
       - QQ_BOT_URL=${QQ_BOT_URL}
@@ -138,6 +140,8 @@ services:
     volumes:
       - duckdb-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock  # Docker socket（用于触发 bilibili-monitor）
+      - ./bilibili-monitor/config:/app/bilibili-config  # UP主配置目录
+      - bilibili-data:/app/bilibili-data  # ASR 设置/用量 + 音频文件访问
     depends_on:
       text-to-sql:
         condition: service_healthy

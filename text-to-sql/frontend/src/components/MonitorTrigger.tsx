@@ -9,6 +9,7 @@ import {
   TriggerStatusResponse,
   UpInfo,
 } from '../services/api';
+import UpManager from './UpManager';
 
 export default function MonitorTrigger() {
   const [status, setStatus] = useState<TriggerStatusResponse | null>(null);
@@ -539,6 +540,11 @@ export default function MonitorTrigger() {
           )}
         </div>
       )}
+
+      {/* UP主管理 */}
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <UpManager />
+      </div>
     </div>
   );
 }

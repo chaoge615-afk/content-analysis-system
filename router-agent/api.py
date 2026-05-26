@@ -23,6 +23,8 @@ from src.query_dispatcher import QueryDispatcher
 from src.result_merger import ResultMerger
 from src.query_logger import QueryLogger
 from src.monitor_trigger import MonitorTrigger
+from src.up_manager import UpManager
+from src.asr_manager import AsrManager
 
 # ============ FastAPI 应用 ============
 app = FastAPI(title="Router Agent", version="1.0.0", description="智能内容分析系统统一入口")
@@ -41,6 +43,8 @@ dispatcher = QueryDispatcher()
 merger = ResultMerger()
 query_logger = QueryLogger()
 monitor_trigger = MonitorTrigger()
+up_manager = UpManager()
+asr_manager = AsrManager()
 
 # DuckDB 只读连接（每次创建新连接，避免跨容器锁冲突）
 
@@ -75,6 +79,15 @@ class TriggerRequest(BaseModel):
 
 class CookieRequest(BaseModel):
     content: str  # Netscape 格式的 Cookie 内容
+
+
+class AddUpRequest(BaseModel):
+    url: str  # B站主页或视频链接
+    whisper_model: Optional[str] = "small"  # Whisper 模型大小
+
+
+class UpdateUpRequest(BaseModel):
+    whisper_model: Optional[str] = None  # 更新的 Whisper 模型
 
 
 # ============ 核心问答接口 ============
@@ -226,6 +239,101 @@ async def get_up_list():
             conn.close()
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
+
+
+# ============ UP主管理接口 ============
+
+@app.get("/api/up_info/resolve")
+async def resolve_up_url(url: str = Query(..., description="B站主页或视频链接")):
+    """解析 B站链接，预览 UP主信息（不保存）"""
+    parsed = up_manager.parse_url(url)
+    if parsed["type"] == "invalid":
+        return {"success": False, "error": "无效的链接格式，请提供 B站主页或视频链接"}
+
+    profile = up_manager.fetch_profile(parsed)
+    return profile
+
+
+@app.get("/api/up_info")
+async def list_ups():
+    """列出所有已配置的 UP主（从 config/ 目录读取）"""
+    ups = up_manager.list_ups()
+
+    # 补充 DuckDB 中的视频数量
+    try:
+        conn = _get_db()
+        try:
+            for up in ups:
+                uid = up["uid"]
+                if uid:
+                    count = conn.execute(
+                        "SELECT COUNT(*) FROM video_meta WHERE up_uid = ?", [uid]
+                    ).fetchone()[0]
+                    up["video_count"] = count
+                    up["has_video"] = count > 0
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+    return {"success": True, "data": ups}
+
+
+@app.post("/api/up_info")
+async def add_up(req: AddUpRequest):
+    """添加新 UP主（解析链接 → 获取信息 → 创建配置）"""
+    result = up_manager.add_up(req.url, req.whisper_model or "small")
+    return result
+
+
+@app.delete("/api/up_info/{uid}")
+async def remove_up(uid: str):
+    """删除 UP主配置"""
+    result = up_manager.remove_up(uid)
+    return result
+
+
+# ============ ASR 转写接口 ============
+
+class AsrSettingsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    monthly_budget_minutes: Optional[float] = None
+
+
+@app.get("/api/asr/status")
+async def get_asr_status():
+    """获取 ASR 设置和用量状态"""
+    return {"success": True, "data": asr_manager.get_status()}
+
+
+@app.post("/api/asr/settings")
+async def update_asr_settings(req: AsrSettingsRequest):
+    """更新 ASR 设置"""
+    data = {}
+    if req.enabled is not None:
+        data["enabled"] = req.enabled
+    if req.monthly_budget_minutes is not None:
+        data["monthly_budget_minutes"] = req.monthly_budget_minutes
+
+    result = asr_manager.update_settings(data)
+    return {"success": True, "data": result}
+
+
+@app.post("/api/asr/transcribe")
+async def trigger_asr_transcribe():
+    """手动触发 ASR 转写（通过 Docker SDK 启动 bilibili-monitor --asr）"""
+    # 检查预算
+    budget_check = asr_manager.check_budget()
+    if not budget_check["ok"]:
+        return {
+            "success": False,
+            "error": budget_check["message"],
+        }
+
+    # 复用 MonitorTrigger 的容器启动逻辑，添加 --asr 参数
+    params = {"asr": True}
+    result = monitor_trigger.trigger(params)
+    return result
 
 
 @app.get("/api/recent")
