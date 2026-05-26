@@ -3,10 +3,13 @@
 ## 项目概述
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
-## 当前状态（2026-05-26）
+## 当前状态（2026-05-27）
 - Phase 1-8 全部完成（133/133 任务）✅
 - Phase 9 进行中（混合转录架构：NAS下载 + 开发机GPU转录 + 飞牛Sync）
   - **9.2 Docker GPU 直通完成**：`gpu-service` 容器自动启动，RTX 4060 (8188MB) CUDA 12.4 直通验证通过
+- Phase 10 待开发（前端 UP主管理 + NAS 云 ASR 转写）
+  - 前端添加新 UP主：输入 B站链接 → 自动识别 → 加入监控列表
+  - NAS 云 ASR：硅基流动 SenseVoiceSmall（免费）替代本地 Whisper，预算上限 + 手动开关
 - P0 完成：bilibili-monitor 全流程验证通过
 - P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
 - P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
