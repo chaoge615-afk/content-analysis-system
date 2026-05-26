@@ -171,6 +171,32 @@ services:
     restart: unless-stopped
     mem_limit: 256m
 
+  # GPU 转录服务（开发机专用，CUDA 直通）
+  # 仅 dev profile 启用，NAS 无 GPU 不需要
+  gpu-service:
+    build:
+      context: ./bilibili-monitor
+      dockerfile: Dockerfile.gpu
+    container_name: gpu-service
+    profiles: [dev]
+    ports:
+      - "8011:8011"
+    volumes:
+      # 挂载飞牛 Sync 同步目录（开发机本地路径）
+      - ${GPU_DOWNLOADS_DIR:-./bilibili-monitor/downloads}:/sync/downloads
+      - ${GPU_TRANSCRIPTS_DIR:-./bilibili-monitor/transcripts}:/sync/transcripts
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    mem_limit: 4g
+
   # ============ 按需服务（非常驻） ============
 
   # bilibili-monitor（B站视频下载+转写+精炼）

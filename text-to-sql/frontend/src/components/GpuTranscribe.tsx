@@ -8,8 +8,8 @@ import {
 export default function GpuTranscribe() {
   const [gpuStatus, setGpuStatus] = useState<GpuStatusResponse | null>(null);
   const [checking, setChecking] = useState(true);
-  const [downloadsDir, setDownloadsDir] = useState('D:\\sync\\downloads');
-  const [transcriptsDir, setTranscriptsDir] = useState('D:\\sync\\transcripts');
+  const [downloadsDir, setDownloadsDir] = useState('/sync/downloads');
+  const [transcriptsDir, setTranscriptsDir] = useState('/sync/transcripts');
   const [modelSize, setModelSize] = useState('small');
   const [device, setDevice] = useState('cuda');
   const [triggering, setTriggering] = useState(false);
@@ -94,10 +94,10 @@ export default function GpuTranscribe() {
         <h3 className="text-lg font-semibold text-gray-700 mb-2">此功能仅限开发机使用</h3>
         <p className="text-sm text-gray-500 mb-4">
           GPU 转录服务需要 NVIDIA 显卡（RTX 4060），<br />
-          请在开发机上启动 GPU 服务后再访问此页面。
+          请确认 docker compose 已启动 gpu-service 容器。
         </p>
         <code className="text-xs bg-gray-100 px-3 py-1.5 rounded">
-          python bilibili-monitor/scripts/gpu_service.py --port 8011
+          docker compose --profile dev up -d gpu-service
         </code>
         <button
           onClick={fetchStatus}
@@ -144,7 +144,7 @@ export default function GpuTranscribe() {
             type="text"
             value={downloadsDir}
             onChange={(e) => setDownloadsDir(e.target.value)}
-            placeholder="D:\sync\downloads"
+            placeholder="/sync/downloads"
             className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
             disabled={taskRunning}
           />
@@ -155,7 +155,7 @@ export default function GpuTranscribe() {
             type="text"
             value={transcriptsDir}
             onChange={(e) => setTranscriptsDir(e.target.value)}
-            placeholder="D:\sync\transcripts"
+            placeholder="/sync/transcripts"
             className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
             disabled={taskRunning}
           />
