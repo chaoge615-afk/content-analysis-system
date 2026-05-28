@@ -223,15 +223,28 @@ class UpManager:
         uid = profile["uid"]
         name = profile["name"]
 
-        # 3. 检查是否已存在
-        config_path = self.config_dir / f"{uid}.yaml"
-        if config_path.exists():
+        # 3. 检查是否已存在（按 UID 遍历查找，避免名称不同导致重复）
+        existing = None
+        for yaml_file in self.config_dir.glob("*.yaml"):
+            try:
+                with open(yaml_file, encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f)
+                if str(cfg.get("uid", "")) == uid:
+                    existing = yaml_file
+                    break
+            except Exception:
+                continue
+
+        if existing:
             return {
                 "success": False,
-                "error": f"UP主已存在: {name} (UID: {uid})，配置文件: {config_path.name}",
+                "error": f"UP主已存在: {name} (UID: {uid})，配置文件: {existing.name}",
             }
 
-        # 4. 生成 YAML 配置
+        # 4. 生成 YAML 配置（使用名称作为文件名，更易读）
+        # 文件名安全处理：替换不适合文件系统的字符
+        safe_name = name.replace("/", "_").replace("\\", "_").replace(":", "_")
+        config_path = self.config_dir / f"{safe_name}.yaml"
         config = {
             **DEFAULT_CONFIG,
             "name": name,

@@ -317,7 +317,15 @@ class UpExporter:
 
         # 2. 写入配置文件
         config = yaml.safe_load(config_yaml)
-        config_path = self.config_dir / f"{uid}.yaml"
+
+        # 先检查是否已有同 UID 的配置文件（可能文件名不是 {uid}.yaml）
+        existing_config = self._find_config(uid)
+        if existing_config:
+            config_path = existing_config
+        else:
+            # 新 UP主，使用名称作为文件名
+            safe_name = name.replace("/", "_").replace("\\", "_").replace(":", "_")
+            config_path = self.config_dir / f"{safe_name}.yaml"
 
         config_written = False
         if config_path.exists():
