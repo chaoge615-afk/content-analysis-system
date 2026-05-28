@@ -121,11 +121,14 @@ async def chat(req: ChatRequest):
     route_type = intent["route_type"]
     filters = intent.get("filters", {})
     reasoning = intent.get("reasoning", "")
+    error_hint = intent.get("error_hint", "")
 
     # Step 2: 分发查询
     if route_type == "structured":
         sql_result = dispatcher.query_sql(question, filters=filters, intent=intent)
         answer = sql_result.get("answer") or sql_result.get("error", "查询无结果")
+        if error_hint:
+            answer = f"{error_hint}\n\n{answer}"
         elapsed = time.time() - start_time
 
         # 记录查询日志
@@ -143,6 +146,8 @@ async def chat(req: ChatRequest):
     elif route_type == "semantic":
         rag_result = dispatcher.query_rag(question, filters=filters)
         answer = rag_result.get("answer", "未找到相关内容")
+        if error_hint:
+            answer = f"{error_hint}\n\n{answer}"
         elapsed = time.time() - start_time
 
         # 记录查询日志
@@ -167,6 +172,8 @@ async def chat(req: ChatRequest):
 
         # LLM 融合结果
         answer = merger.merge(question, sql_result, rag_result)
+        if error_hint:
+            answer = f"{error_hint}\n\n{answer}"
         elapsed = time.time() - start_time
 
         # 记录查询日志

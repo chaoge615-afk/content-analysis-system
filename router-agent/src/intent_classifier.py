@@ -224,8 +224,21 @@ class IntentClassifier:
             return self._parse_response(content)
 
         except Exception as e:
-            print(f"[意图分类] 调用 LLM 失败: {e}")
-            return self._default_result()
+            error_msg = str(e)
+            print(f"[意图分类] 调用 LLM 失败: {error_msg}")
+            # 根据错误类型生成不同的提示
+            if "429" in error_msg or "rate_limit" in error_msg or "usage limit" in error_msg:
+                hint = "⚠️ 意图分类 LLM 额度不足，请检查 API 配额；如已续费可能需等待生效，请稍后再试。已降级到语义查询。"
+            elif "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+                hint = "⚠️ 意图分类 LLM 连接超时，可能是网络问题，请稍后再试。已降级到语义查询。"
+            else:
+                hint = f"⚠️ 意图分类异常，已降级到语义查询。（{error_msg[:80]}）"
+            return {
+                "route_type": "semantic",
+                "filters": {},
+                "reasoning": f"分类失败: {error_msg[:100]}",
+                "error_hint": hint,
+            }
 
     def _parse_response(self, content: str) -> dict:
         """解析 LLM 返回的 JSON"""
