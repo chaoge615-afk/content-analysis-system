@@ -203,6 +203,7 @@ services:
               capabilities: [gpu]
     environment:
       - PYTHONUNBUFFERED=1
+      - HF_ENDPOINT=https://hf-mirror.com
     restart: unless-stopped
     mem_limit: 4g
 

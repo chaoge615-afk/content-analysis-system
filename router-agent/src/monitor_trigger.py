@@ -154,9 +154,9 @@ class MonitorTrigger:
                 # 注意：Docker SDK 需要 host 路径，不能用 named volumes
                 # 但 named volumes 在 Docker daemon 层面是可以的
                 volumes = [
-                    "bilibili-data:/app/downloads:rw",
-                    "bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
-                    "duckdb-data:/app/data:rw",
+                    "ai_bilibili-data:/app/downloads:rw",
+                    "ai_bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
+                    "ai_duckdb-data:/app/data:rw",
                 ]
 
                 # 挂载本地目录（需要知道 host 路径）

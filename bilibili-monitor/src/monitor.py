@@ -492,94 +492,101 @@ def main():
 
     if not new_videos:
         print("没有发现新视频")
-        sys.exit(0)
-
-    print(f"发现 {len(new_videos)} 个新视频:\n")
-    for i, v in enumerate(new_videos, 1):
-        print(f"  {i}. {format_video_info(v)}")
-    print()
-
-    if args.dry_run:
-        print("(--dry-run 模式，只显示不下载)")
-        sys.exit(0)
-
-    # ── metadata-only 模式：只写入 DuckDB，不下载不转写 ──
-    if args.metadata_only:
-        from db_writer import DBWriter
-
-        print("\n(--metadata-only 模式，写入 DuckDB)")
-        with DBWriter() as db:
-            # 准备视频元数据
-            video_records = []
-            for v in new_videos:
-                pub_date = None
-                t = v.get('created') or v.get('pubdate') or 0
-                if t:
-                    pub_date = datetime.fromtimestamp(t).date()
-
-                video_records.append({
-                    'bvid': v['bvid'],
-                    'up_name': up_name,
-                    'up_uid': uid,
-                    'title': v['title'],
-                    'publish_date': pub_date,
-                    'category': v.get('tname', ''),
-                    'duration': v.get('duration', 0),
-                    'summary': None,
-                    'tags': v.get('tags', ''),
-                })
-
-            # 批量写入
-            success = db.insert_videos(video_records)
-            print(f"  写入视频元数据: {success}/{len(video_records)} 成功")
-
-            # 更新 UP 主信息
-            db.update_up_info(
-                uid=uid,
-                name=up_name,
-                total_videos=len(videos),
-                config_file=args.config,
-            )
-            print(f"  更新 UP 主信息: {up_name} (共 {len(videos)} 个视频)")
-
-        sys.exit(0)
-
-    # ── 下载 ──
-    from download_videos import download_video
-
-    safe_name = up_name.replace('/', '_').replace('\\', '_')
-    output_dir = os.path.join(download_root, safe_name)
-    os.makedirs(output_dir, exist_ok=True)
-
-    newly_downloaded = []   # [(bvid, title), ...]
-    for i, v in enumerate(new_videos, 1):
-        bvid = v['bvid']
-        title = v['title']
-        url = f"https://www.bilibili.com/video/{bvid}"
-
-        print(f"[{i}/{len(new_videos)}] 下载: {title}")
-        ok = download_video(url, output_dir, cookie_file)
-
-        if ok:
-            newly_downloaded.append((bvid, title))
-            # 下载成功后立即写入 downloaded checkpoint
-            append_checkpoint(uid, '_downloaded', [bvid])
-            print(f"  ✓ 完成 (已记入 downloaded)")
+        # 检查是否有已下载但未转写的视频，如果有则继续转写流程
+        pending = downloaded_set - done_bvid_set
+        if pending and not args.no_transcribe:
+            print(f"但有 {len(pending)} 个已下载未转写的视频，进入转写流程")
+            newly_downloaded = []
+            # 跳过下载，直接进入转写
+            safe_name = up_name.replace('/', '_').replace('\\', '_')
+            output_dir = os.path.join(download_root, safe_name)
         else:
-            print(f"  ✗ 失败")
+            sys.exit(0)
+    else:
+        print(f"发现 {len(new_videos)} 个新视频:\n")
+        for i, v in enumerate(new_videos, 1):
+            print(f"  {i}. {format_video_info(v)}")
+        print()
 
-        if i < len(new_videos):
-            time.sleep(3)
+        if args.dry_run:
+            print("(--dry-run 模式，只显示不下载)")
+            sys.exit(0)
 
-    print(f"\n{'='*60}")
-    print(f"下载完成: {len(newly_downloaded)}/{len(new_videos)} 成功")
-    print(f"{'='*60}")
+        # ── metadata-only 模式：只写入 DuckDB，不下载不转写 ──
+        if args.metadata_only:
+            from db_writer import DBWriter
+
+            print("\n(--metadata-only 模式，写入 DuckDB)")
+            with DBWriter() as db:
+                video_records = []
+                for v in new_videos:
+                    pub_date = None
+                    t = v.get('created') or v.get('pubdate') or 0
+                    if t:
+                        pub_date = datetime.fromtimestamp(t).date()
+
+                    video_records.append({
+                        'bvid': v['bvid'],
+                        'up_name': up_name,
+                        'up_uid': uid,
+                        'title': v['title'],
+                        'publish_date': pub_date,
+                        'category': v.get('tname', ''),
+                        'duration': v.get('duration', 0),
+                        'summary': None,
+                        'tags': v.get('tags', ''),
+                    })
+
+                success = db.insert_videos(video_records)
+                print(f"  写入视频元数据: {success}/{len(video_records)} 成功")
+                db.update_up_info(
+                    uid=uid,
+                    name=up_name,
+                    total_videos=len(videos),
+                    config_file=args.config,
+                )
+                print(f"  更新 UP 主信息: {up_name} (共 {len(videos)} 个视频)")
+
+            sys.exit(0)
+
+        # ── 下载 ──
+        from download_videos import download_video
+
+        safe_name = up_name.replace('/', '_').replace('\\', '_')
+        output_dir = os.path.join(download_root, safe_name)
+        os.makedirs(output_dir, exist_ok=True)
+
+        newly_downloaded = []   # [(bvid, title), ...]
+        for i, v in enumerate(new_videos, 1):
+            bvid = v['bvid']
+            title = v['title']
+            url = f"https://www.bilibili.com/video/{bvid}"
+
+            print(f"[{i}/{len(new_videos)}] 下载: {title}")
+            ok = download_video(url, output_dir, cookie_file)
+
+            if ok:
+                newly_downloaded.append((bvid, title))
+                append_checkpoint(uid, '_downloaded', [bvid])
+                print(f"  ✓ 完成 (已记入 downloaded)")
+            else:
+                print(f"  ✗ 失败")
+
+            if i < len(new_videos):
+                time.sleep(3)
+
+        print(f"\n{'='*60}")
+        print(f"下载完成: {len(newly_downloaded)}/{len(new_videos)} 成功")
+        print(f"{'='*60}")
 
     # ── 转写 ──
-    if newly_downloaded and not args.no_transcribe:
+    # 检查是否有已下载但未转写的视频（上次转写失败的情况）
+    dl_set = load_checkpoint(uid, '_downloaded')
+    done_set = load_checkpoint(uid, '_done_bvid')
+    pending_transcribe = dl_set - done_set
+
+    if (newly_downloaded or pending_transcribe) and not args.no_transcribe:
         # 转写前预检：把 downloaded 中已在 done_bvid 的 BVID 移走（避免重复转写）
-        dl_set = load_checkpoint(uid, '_downloaded')
-        done_set = load_checkpoint(uid, '_done_bvid')
         already_done = dl_set & done_set
         if already_done:
             print(f"  [预检] 从 downloaded 移除 {len(already_done)} 个已转写 BVID")
@@ -588,6 +595,9 @@ def main():
             with open(dl_ck_path, 'w') as f:
                 for bv in remaining:
                     f.write(bv + '\n')
+
+        if pending_transcribe and not newly_downloaded:
+            print(f"\n  发现 {len(pending_transcribe)} 个已下载但未转写的视频，触发补转写")
 
         transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
         print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
