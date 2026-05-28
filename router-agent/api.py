@@ -11,8 +11,9 @@ from pathlib import Path
 # 确保 src 可导入
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 import concurrent.futures
@@ -25,6 +26,7 @@ from src.query_logger import QueryLogger
 from src.monitor_trigger import MonitorTrigger
 from src.up_manager import UpManager
 from src.asr_manager import AsrManager
+from src.up_export import UpExporter
 
 # ============ FastAPI 应用 ============
 app = FastAPI(title="Router Agent", version="1.0.0", description="智能内容分析系统统一入口")
@@ -45,6 +47,7 @@ query_logger = QueryLogger()
 monitor_trigger = MonitorTrigger()
 up_manager = UpManager()
 asr_manager = AsrManager()
+up_exporter = UpExporter()
 
 # DuckDB 只读连接（每次创建新连接，避免跨容器锁冲突）
 
@@ -298,6 +301,45 @@ async def remove_up(uid: str):
     """删除 UP主配置"""
     result = up_manager.remove_up(uid)
     return result
+
+
+@app.get("/api/up_info/{uid}/export")
+async def export_up(uid: str):
+    """
+    导出 UP主 完整数据为 ZIP 文件
+
+    包含：配置、视频元数据、ChromaDB 向量、转写文本、检查点文件
+    """
+    try:
+        zip_bytes = up_exporter.export_up(uid)
+        filename = f"up_export_{uid}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        return {"success": False, "error": f"导出失败: {e}"}
+
+
+@app.post("/api/up_info/import")
+async def import_up(
+    file: UploadFile = File(...),
+    overwrite: bool = Form(False),
+):
+    """
+    从 ZIP 文件导入 UP主 完整数据
+
+    支持覆盖或跳过已有数据
+    """
+    try:
+        zip_bytes = await file.read()
+        result = up_exporter.import_up(zip_bytes, overwrite=overwrite)
+        return result
+    except Exception as e:
+        return {"success": False, "error": f"导入失败: {e}"}
 
 
 # ============ ASR 转写接口 ============

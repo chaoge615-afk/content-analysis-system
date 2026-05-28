@@ -6,3 +6,6 @@ python-dotenv
 pydantic
 duckdb
 docker>=7.0.0
+python-multipart
+pyyaml
+chromadb

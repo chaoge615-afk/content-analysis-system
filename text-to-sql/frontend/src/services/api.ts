@@ -420,6 +420,51 @@ export async function removeUp(uid: string): Promise<{ success: boolean; message
   }
 }
 
+export interface UpImportResult {
+  success: boolean;
+  imported?: {
+    uid: string;
+    name: string;
+    config_written: boolean;
+    up_info_written: number;
+    videos_written: number;
+    chromadb_written: number;
+    transcripts_written: number;
+    checkpoints_written: number;
+  };
+  error?: string;
+}
+
+/** 导出 UP主 数据（返回 ZIP Blob） */
+export async function exportUp(uid: string): Promise<Blob | null> {
+  try {
+    const response = await api.get(`/api/up_info/${uid}/export`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  } catch {
+    return null;
+  }
+}
+
+/** 导入 UP主 数据（上传 ZIP） */
+export async function importUp(
+  file: File,
+  overwrite: boolean = false
+): Promise<UpImportResult> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('overwrite', String(overwrite));
+    const response = await api.post('/api/up_info/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  } catch (error: any) {
+    return { success: false, error: error.message || '导入请求失败' };
+  }
+}
+
 // ============ ASR 转写 API ============
 
 export interface AsrSettings {
