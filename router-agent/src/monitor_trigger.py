@@ -301,7 +301,7 @@ class MonitorTrigger:
 
     def _build_command(self, params: dict) -> list:
         """构建容器启动命令"""
-        cmd = ["python", "scripts/monitor_all.py"]
+        cmd = ["python", "src/monitor_all.py"]
         if params.get("max_videos"):
             cmd.extend(["--max-videos", str(params["max_videos"])])
         if params.get("asr"):

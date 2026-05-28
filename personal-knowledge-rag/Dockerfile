@@ -1,5 +1,5 @@
 # 视频知识库RAG - Docker 构建文件
-# 构建上下文: 根目录（需要访问 shared_config.py 和 shared_embeddings.py）
+# 构建上下文: 根目录（需要访问 shared/ 目录）
 FROM python:3.11-slim
 
 # 设置工作目录
@@ -15,8 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制共享模块（根目录）
-COPY shared_config.py shared_embeddings.py ./
+# 复制共享模块
+COPY shared/ ./shared/
+ENV PYTHONPATH=/app/shared
 
 # 复制 RAG 项目依赖文件
 COPY personal-knowledge-rag/requirements.txt .

@@ -10,7 +10,7 @@
 ai项目/
 ├── .env                    # 统一配置文件（不提交到 git）
 ├── .env.example            # 配置模板
-└── shared_config.py        # 统一配置加载器
+└── shared/shared_config.py        # 统一配置加载器
 ```
 
 ## API 分类
@@ -70,7 +70,7 @@ REFINE_MODEL=deepseek-v4-pro
 **使用项目**：
 - bilibili-monitor（refiner.py 内容精炼）
 - personal-knowledge-rag（RAG 问答默认 LLM）
-- refine_batch.py（批量精炼）
+- relationship-analysis/scripts/refine_batch.py（批量精炼）
 
 ## 在子项目中使用
 
@@ -103,7 +103,7 @@ refine_key = config.chat.refine_key
 
 ### 方式 2：使用兼容性环境变量
 
-`shared_config.py` 会自动设置以下兼容性环境变量，旧代码无需修改：
+`shared/shared_config.py` 会自动设置以下兼容性环境变量，旧代码无需修改：
 
 ```python
 # 自动映射
@@ -149,7 +149,7 @@ print(status)
 ### bilibili-monitor
 
 ```python
-# scripts/refiner.py
+# src/refiner.py
 from shared_config import config
 
 API_URL = config.chat.refine_url
@@ -229,7 +229,7 @@ A: 运行配置检查：
 
 ```bash
 cd ai项目
-python shared_config.py
+python shared/shared_config.py
 ```
 
 输出示例：

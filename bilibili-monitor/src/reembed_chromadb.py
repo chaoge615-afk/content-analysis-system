@@ -14,7 +14,7 @@ from pathlib import Path
 # 添加路径
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
-sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
+sys.path.insert(0, str(SCRIPT_DIR.parent.parent / "shared"))
 
 from db_writer import DBWriter
 from chroma_writer import ChromaWriter

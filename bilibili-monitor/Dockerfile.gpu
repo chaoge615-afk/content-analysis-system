@@ -29,8 +29,8 @@ RUN pip install --no-cache-dir \
     "faster-whisper>=1.0"
 
 # 复制服务脚本
-COPY scripts/gpu_service.py .
-COPY scripts/transcribe_gpu.py .
+COPY src/gpu_service.py .
+COPY src/transcribe_gpu.py .
 
 # 环境变量
 ENV PYTHONUNBUFFERED=1

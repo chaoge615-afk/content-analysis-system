@@ -7,8 +7,8 @@ import chromadb
 from chromadb.config import Settings
 from typing import List, Optional
 
-# Add project root to path for shared modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add shared/ directory to path for shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from shared_embeddings import SiliconFlowEmbeddings
 
 

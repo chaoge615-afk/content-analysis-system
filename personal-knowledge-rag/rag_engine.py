@@ -22,11 +22,11 @@ from langchain_core.documents import Document
 # 混合检索模块
 from hybrid_search import BM25, HybridSearch
 
-# 共享 Embeddings 模块（根目录 shared_embeddings.py）
+# 共享 Embeddings 模块（shared/ 目录）
 import sys
-_ROOT_DIR = str(Path(__file__).parent.parent)
-if _ROOT_DIR not in sys.path:
-    sys.path.insert(0, _ROOT_DIR)
+_SHARED_DIR = str(Path(__file__).parent.parent / "shared")
+if _SHARED_DIR not in sys.path:
+    sys.path.insert(0, _SHARED_DIR)
 from shared_embeddings import SiliconFlowEmbeddings
 
 # 加载环境变量

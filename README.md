@@ -100,7 +100,7 @@ docker compose run --rm bilibili-monitor
 ### 迁移已有精炼数据
 
 ```bash
-docker compose run --rm bilibili-monitor python scripts/migrate_refined.py
+docker compose run --rm bilibili-monitor python src/migrate_refined.py
 ```
 
 ## 子项目说明
@@ -143,8 +143,8 @@ docker compose --profile dev up -d
 ```
 ├── docker-compose.yml          # 统一编排
 ├── .env.example                # 环境变量模板
-├── shared_embeddings.py        # 共享 Embedding 模块
-├── shared_config.py            # 共享配置加载
+├── shared/shared_embeddings.py  # 共享 Embedding 模块
+├── shared/shared_config.py      # 共享配置加载
 ├── bilibili-monitor/           # B站视频采集
 ├── personal-knowledge-rag/     # 视频知识库 RAG
 ├── text-to-sql/                # Text-to-SQL 服务

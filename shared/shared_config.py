@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 # 定位根目录 .env 文件（ai项目/.env）
 _CURRENT_FILE = Path(__file__).resolve()
-ROOT_DIR = _CURRENT_FILE.parent
+ROOT_DIR = _CURRENT_FILE.parent.parent  # 从 shared/ 回到项目根
 ENV_FILE = ROOT_DIR / ".env"
 
 # 加载 .env

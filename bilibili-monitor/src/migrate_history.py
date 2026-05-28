@@ -17,9 +17,9 @@ from typing import Optional
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-# 添加根目录（加载 shared_config）
-ROOT_DIR = SCRIPT_DIR.parent.parent
-sys.path.insert(0, str(ROOT_DIR))
+# 添加 shared/ 目录（加载 shared_config, shared_embeddings）
+_SHARED_DIR = SCRIPT_DIR.parent.parent / "shared"
+sys.path.insert(0, str(_SHARED_DIR))
 
 from db_writer import DBWriter
 from chroma_writer import ChromaWriter

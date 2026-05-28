@@ -15,7 +15,7 @@ bilibili-monitor/
 ├── data/                        # 已处理 BVID 记录（自动生成）
 │   ├── anjiajia_done_bvid.txt   # 转写完成的 BV
 │   └── 3546912280021515_done_bvid.txt
-├── scripts/
+├── src/
 │   ├── monitor.py               # 主脚本（单 UP）
 │   ├── monitor_all.py           # 多 UP 聚合（扫描 config/ 全部）
 │   ├── get_up_videos.py        # B站 WBI 签名接口
@@ -87,10 +87,10 @@ transcribe_skill_dir: "~/.hermes/skills/bilibili-transcribe"
 cd ~/.hermes/skills/bilibili-monitor
 
 # dry-run：查看有哪些新视频（不下载）
-python3 scripts/monitor.py config/an\ Jiajia.yaml --dry-run
+python3 src/monitor.py config/an\ Jiajia.yaml --dry-run
 
 # 正式运行：下载 + 转写 + QQ 通知
-python3 scripts/monitor.py config/an\ Jiajia.yaml
+python3 src/monitor.py config/an\ Jiajia.yaml
 ```
 
 ---
@@ -100,9 +100,9 @@ python3 scripts/monitor.py config/an\ Jiajia.yaml
 ### 场景 A：单独监控一个 UP 主
 
 ```bash
-python3 scripts/monitor.py config/an\ Jiajia.yaml --dry-run          # 检查新视频
-python3 scripts/monitor.py config/an\ Jiajia.yaml                    # 下载 + 转写 + 通知
-python3 scripts/monitor.py config/an\ Jiajia.yaml --force            # 强制全量重跑（忽略 done_bvid）
+python3 src/monitor.py config/an\ Jiajia.yaml --dry-run          # 检查新视频
+python3 src/monitor.py config/an\ Jiajia.yaml                    # 下载 + 转写 + 通知
+python3 src/monitor.py config/an\ Jiajia.yaml --force            # 强制全量重跑（忽略 done_bvid）
 ```
 
 ### 场景 B：同时监控多个 UP 主
@@ -110,9 +110,9 @@ python3 scripts/monitor.py config/an\ Jiajia.yaml --force            # 强制全
 `monitor_all.py` 扫描整个 `config/` 目录，逐一运行全部配置：
 
 ```bash
-python3 scripts/monitor_all.py --dry-run          # 全部 UP 一起 dry-run
-python3 scripts/monitor_all.py                    # 全部 UP 下载 + 转写 + 通知
-python3 scripts/monitor_all.py --up an             # 只运行指定 UP（模糊匹配）
+python3 src/monitor_all.py --dry-run          # 全部 UP 一起 dry-run
+python3 src/monitor_all.py                    # 全部 UP 下载 + 转写 + 通知
+python3 src/monitor_all.py --up an             # 只运行指定 UP（模糊匹配）
 ```
 
 ### 场景 C：本地已有 m4a，只需要转写
@@ -121,7 +121,7 @@ python3 scripts/monitor_all.py --up an             # 只运行指定 UP（模糊
 . ~/.hermes/skills/bilibili-transcribe/.venv-bilibili-transcribe/bin/activate
 export HF_ENDPOINT=https://hf-mirror.com
 
-python3 -u scripts/transcribe_local.py \
+python3 -u src/transcribe_local.py \
     "/home/chaoge/B站监控/恋爱教头桃姐" \
     --model-size medium --device cuda
 
@@ -193,7 +193,7 @@ hermes cron create \
   --deliver qqbot \
   --enabled-toolsets terminal \
   "0 */6 * * *" \
-  "bash -c 'cd /home/chaoge/.hermes/skills/bilibili-monitor && . ~/.hermes/skills/bilibili-transcribe/.venv-bilibili-transcribe/bin/activate && export HF_ENDPOINT=https://hf-mirror.com && python3 scripts/monitor_all.py 2>&1'"
+  "bash -c 'cd /home/chaoge/.hermes/skills/bilibili-monitor && . ~/.hermes/skills/bilibili-transcribe/.venv-bilibili-transcribe/bin/activate && export HF_ENDPOINT=https://hf-mirror.com && python3 src/monitor_all.py 2>&1'"
 ```
 
 > ⚠️ **必须使用 `--enabled-toolsets terminal` shell 直执行模式**，不可使用 `--skill bilibili-monitor`（skill agent 框架在 whisper 转写阶段会超时/静默失败）。
@@ -220,14 +220,14 @@ hermes cron create \
 **错误做法**：
 ```bash
 # ❌ 同时跑多个 transcribe_local.py — 会冲突
-python3 scripts/transcribe_local.py "目录A" &
-python3 scripts/transcribe_local.py "目录B" &
+python3 src/transcribe_local.py "目录A" &
+python3 src/transcribe_local.py "目录B" &
 ```
 
 **正确做法**：统一走 `monitor_all.py`，它内部串行处理所有 UP，不会并发。
 ```bash
 # ✅ 正确 — 全量串行
-python3 scripts/monitor_all.py
+python3 src/monitor_all.py
 ```
 
 ---
@@ -263,7 +263,7 @@ ls ~/.hermes/skills/bilibili-transcribe/.venv-bilibili-transcribe/bin/python
 
 **修复方法（首次部署时执行一次即可）**：
 ```bash
-sed -i 's/max_count=30/max_count=9999/' scripts/monitor.py scripts/monitor_all.py
+sed -i 's/max_count=30/max_count=9999/' src/monitor.py src/monitor_all.py
 ```
 
 ### done_bvid 有记录但无 txt 文件（转写静默失败）
@@ -341,10 +341,10 @@ hermes process list   # 只显示当前会话启动的进程
 
 ```bash
 # 单个 UP 补扫
-python3 scripts/monitor.py config/3546912280021515.yaml --force
+python3 src/monitor.py config/3546912280021515.yaml --force
 
 # 全部 UP 补扫
-python3 scripts/monitor_all.py --force
+python3 src/monitor_all.py --force
 ```
 
 > ⚠️ `--force` 会忽略 done_bvid，下载并转写全部历史视频（最多 9999 条），确认只会触发一次。

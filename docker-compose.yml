@@ -235,7 +235,7 @@ services:
         condition: service_healthy
     restart: "no"
     mem_limit: 4g
-    command: python scripts/monitor_all.py
+    command: python src/monitor_all.py
 
   # bilibili-monitor 定时调度（每 6 小时自动运行）
   # 使用 docker:cli 镜像 + crond，挂载 Docker socket 调度 bilibili-monitor

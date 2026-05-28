@@ -21,7 +21,7 @@ bilibili-monitor/
 ├── data/                        # Checkpoint 文件（自动生成）
 │   ├── <name>_downloaded.txt    # 已下载待转写
 │   └── <name>_done_bvid.txt     # 转写完成
-└── scripts/
+└── src/
     ├── monitor_all.py           # 多 UP 主聚合入口（扫描 config/ 全部）
     ├── monitor.py               # 单 UP 主处理主脚本
     ├── get_up_videos.py         # B站 WBI 签名接口拉取视频列表
@@ -106,13 +106,13 @@ whisper_device: "cuda"        # cuda 或 cpu
 docker compose run --rm bilibili-monitor
 
 # 干跑模式（不实际执行）
-docker compose run --rm bilibili-monitor python scripts/monitor_all.py --dry-run
+docker compose run --rm bilibili-monitor python src/monitor_all.py --dry-run
 
 # 指定某个 UP 主
-docker compose run --rm bilibili-monitor python scripts/monitor_all.py --up 桃姐
+docker compose run --rm bilibili-monitor python src/monitor_all.py --up 桃姐
 
 # 只拉取元数据（不下载视频）
-docker compose run --rm bilibili-monitor python scripts/monitor_all.py --metadata-only
+docker compose run --rm bilibili-monitor python src/monitor_all.py --metadata-only
 ```
 
 ### 4. 定时调度（NAS）
