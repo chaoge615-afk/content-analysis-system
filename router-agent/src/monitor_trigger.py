@@ -153,20 +153,17 @@ class MonitorTrigger:
                 # 构建 volume 映射
                 # 注意：Docker SDK 需要 host 路径，不能用 named volumes
                 # 但 named volumes 在 Docker daemon 层面是可以的
-                volumes = {
-                    "bilibili-data": {"bind": "/app/downloads", "mode": "rw"},
-                    "duckdb-data": {"bind": "/app/data", "mode": "rw"},
-                }
+                volumes = [
+                    "bilibili-data:/app/downloads:rw",
+                    "bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
+                    "duckdb-data:/app/data:rw",
+                ]
 
                 # 挂载本地目录（需要知道 host 路径）
                 project_dir = os.getenv("PROJECT_DIR", "")
                 if project_dir:
-                    volumes[f"{project_dir}/bilibili-monitor/transcripts"] = {
-                        "bind": "/app/transcripts", "mode": "rw"
-                    }
-                    volumes[f"{project_dir}/bilibili-monitor/chromadb"] = {
-                        "bind": "/app/chromadb", "mode": "rw"
-                    }
+                    volumes.append(f"{project_dir}/bilibili-monitor/transcripts:/app/transcripts:rw")
+                    volumes.append(f"{project_dir}/bilibili-monitor/chromadb:/app/chromadb:rw")
 
                 container = client.containers.run(
                     image=image,
@@ -271,6 +268,9 @@ class MonitorTrigger:
             val = os.getenv(key)
             if val:
                 env[key] = val
+
+        # 强制 Python 实时输出日志（不缓冲）
+        env["PYTHONUNBUFFERED"] = "1"
 
         # Cookie：优先读取文件内容直接注入（避免 volume 名称不匹配导致容器找不到文件）
         cookie_file = os.path.join(

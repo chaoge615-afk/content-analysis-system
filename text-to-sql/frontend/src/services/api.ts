@@ -48,9 +48,9 @@ export interface TriggerStatusResponse {
   status: string;           // "idle" | "running" | "completed" | "failed"
   task: TriggerTask | null;
   docker_available: boolean;
-  ok?: boolean;
-  message?: string;
-  source?: string;   // "file" | "env_file" | "env_content" | "env" | "none"
+  cookie_ok?: boolean;
+  cookie_message?: string;
+  cookie_source?: string;   // "file" | "env_file" | "env_content" | "env" | "none"
 }
 
 export interface QueryLogItem {

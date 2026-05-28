@@ -44,19 +44,24 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # 合并 stderr 到 stdout
         text=True,
         start_new_session=True,
     )
 
+    # 实时流式输出子进程日志
+    output_lines = []
     try:
-        stdout, stderr = proc.communicate(timeout=7200)
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+            output_lines.append(line)
+        proc.wait(timeout=7200)
     except subprocess.TimeoutExpired:
         proc.kill()
-        stdout, stderr = proc.communicate()
+        proc.wait()
         return name, False, 0, f"  ❌ {name} — 异常超时", ""
 
-    output = stdout + stderr
+    output = "".join(output_lines)
 
     # 解析输出中的"发现 N 个新视频"行
     new_count = 0

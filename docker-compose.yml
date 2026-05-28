@@ -192,6 +192,7 @@ services:
       - ${GPU_TRANSCRIPTS_DIR:-./bilibili-monitor/transcripts}:/sync/transcripts
       # 共享 bilibili-monitor 的下载和转写目录（用于采集触发时的 GPU 转写委托）
       - bilibili-data:/app/downloads
+      - bilibili-data:/root/B站监控  # 实际下载目录（YAML 配置的 download_root）
       - ./bilibili-monitor/transcripts:/app/transcripts
     deploy:
       resources:
