@@ -58,15 +58,15 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
   - npm: 淘宝镜像 (`registry.npmmirror.com`)
 - **每次 Docker 镜像重建后，清理构建缓存**：`docker builder prune -a -f`（释放磁盘空间）
-- **每完成一个任务点，立即更新 `开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等），然后 git commit 并 push**
+- **每完成一个任务点，立即更新 `docs/开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等），然后 git commit 并 push**
 - 完成开发后立即 push，避免本地未提交的改动与其他会话冲突
 
 ## 关键文件
-- `开发计划.md` - 任务清单和进度（剩余任务在 Phase 8.5）
-- `开发者快速上手指南.md` - 隐性知识、常见问题、调试技巧
+- `docs/开发计划.md` - 任务清单和进度（剩余任务在 Phase 8.5）
+- `docs/开发者快速上手指南.md` - 隐性知识、常见问题、调试技巧
 - `README.md` - 项目概述、快速开始
-- `智能内容分析系统-*.md` - 架构/工作流/部署规划
-- `refine_batch.py` - 精炼脚本 (三段式: 核心观点+案例摘要+可行动建议, 31个分类)
+- `docs/智能内容分析系统-*.md` - 架构/工作流/部署规划
+- `relationship-analysis/scripts/refine_batch.py` - 精炼脚本 (三段式: 核心观点+案例摘要+可行动建议, 31个分类)
 
 ## 注意事项
 - text-to-sql 声称用CrewAI但实际是纯Python手写pipeline
@@ -76,6 +76,6 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
 
 ## 新会话启动流程
 1. `git pull --rebase`（确保最新）
-2. 读取 `开发计划.md`，找到剩余任务
-3. 读取 `开发者快速上手指南.md` 了解调试技巧和已知坑点
+2. 读取 `docs/开发计划.md`，找到剩余任务
+3. 读取 `docs/开发者快速上手指南.md` 了解调试技巧和已知坑点
 4. 开始开发
