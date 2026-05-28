@@ -117,6 +117,7 @@ export default function MonitorTrigger() {
       setCookieMsg(result.message || 'Cookie 已保存');
       setCookieMsgType('ok');
       setCookieInput('');
+      setCookieTestResult(null);  // 清除旧的测试结果（可能已过期）
       fetchStatus();
     } else {
       setCookieMsg(result.error || '保存失败');
@@ -158,6 +159,8 @@ export default function MonitorTrigger() {
       });
     }
     setCookieTesting(false);
+    // 测试完成后刷新状态，更新 Cookie 状态指示器（绿/红）
+    fetchStatus();
   };
 
   const handleTrigger = async () => {
@@ -177,6 +180,11 @@ export default function MonitorTrigger() {
 
   const isRunning = status?.status === 'running';
   const task = status?.task;
+
+  // Cookie 状态：测试结果为"过期"时覆盖后端判断（后端只检查文件存在，不检查是否过期）
+  const cookieEffectiveOk = cookieTestResult
+    ? cookieTestResult.valid
+    : (status?.cookie_ok ?? false);
 
   return (
     <div className="space-y-4">
@@ -225,18 +233,23 @@ export default function MonitorTrigger() {
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
-                status?.cookie_ok ? 'bg-green-400' : 'bg-red-400'
+                cookieEffectiveOk ? 'bg-green-400' : 'bg-red-400'
               }`}
             />
             <span className="text-sm font-medium text-gray-700">
               Cookie 设置
             </span>
-            {status?.cookie_ok && (
+            {cookieEffectiveOk && (
               <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
                 已配置
               </span>
             )}
-            {!status?.cookie_ok && (
+            {!cookieEffectiveOk && status?.cookie_ok && (
+              <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                已过期
+              </span>
+            )}
+            {!cookieEffectiveOk && !status?.cookie_ok && (
               <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
                 未配置
               </span>
@@ -471,7 +484,7 @@ export default function MonitorTrigger() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleTrigger}
-            disabled={isRunning || triggering || !status?.docker_available || status?.cookie_ok === false}
+            disabled={isRunning || triggering || !status?.docker_available || !cookieEffectiveOk}
             className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium
                        hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
                        transition-colors whitespace-nowrap"
