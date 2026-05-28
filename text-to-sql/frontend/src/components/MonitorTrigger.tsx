@@ -88,10 +88,10 @@ export default function MonitorTrigger() {
 
   // Cookie 未配置时自动展开
   useEffect(() => {
-    if (status && status.cookie_ok === false && !cookieOpen) {
+    if (status && status.ok === false && !cookieOpen) {
       setCookieOpen(true);
     }
-  }, [status?.cookie_ok]);
+  }, [status?.ok]);
 
   const fetchStatus = async () => {
     const data = await getTriggerStatus();
@@ -184,7 +184,7 @@ export default function MonitorTrigger() {
   // Cookie 状态：测试结果为"过期"时覆盖后端判断（后端只检查文件存在，不检查是否过期）
   const cookieEffectiveOk = cookieTestResult
     ? cookieTestResult.valid
-    : (status?.cookie_ok ?? false);
+    : (status?.ok ?? false);
 
   return (
     <div className="space-y-4">
@@ -244,12 +244,12 @@ export default function MonitorTrigger() {
                 已配置
               </span>
             )}
-            {!cookieEffectiveOk && status?.cookie_ok && (
+            {!cookieEffectiveOk && status?.ok && (
               <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
                 已过期
               </span>
             )}
-            {!cookieEffectiveOk && !status?.cookie_ok && (
+            {!cookieEffectiveOk && !status?.ok && (
               <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
                 未配置
               </span>
@@ -261,15 +261,15 @@ export default function MonitorTrigger() {
         {cookieOpen && (
           <div className="px-3 py-3 space-y-2 border-t border-gray-200">
             {/* Cookie 状态描述 */}
-            {status?.cookie_message && (
+            {status?.message && (
               <div
                 className={`text-xs px-2 py-1.5 rounded ${
-                  status.cookie_ok
+                  status.ok
                     ? 'text-green-700 bg-green-50'
                     : 'text-red-700 bg-red-50'
                 }`}
               >
-                {status.cookie_message}
+                {status.message}
               </div>
             )}
 
@@ -315,7 +315,7 @@ export default function MonitorTrigger() {
               >
                 {cookieSaving ? '保存中...' : '保存 Cookie'}
               </button>
-              {status?.cookie_ok && status?.cookie_source === 'file' && (
+              {status?.ok && status?.source === 'file' && (
                 <>
                   <button
                     onClick={handleTestCookie}
