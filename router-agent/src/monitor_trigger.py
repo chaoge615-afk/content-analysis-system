@@ -264,6 +264,7 @@ class MonitorTrigger:
             "SILICONFLOW_API_KEY", "EMBEDDING_API_KEY",
             "REFINE_API_URL", "REFINE_API_KEY",
             "WHISPER_DEVICE", "WHISPER_MODEL", "COMPUTE_TYPE",
+            "GPU_SERVICE_URL",  # 开发机 GPU 转写服务地址
         ]
         env = {}
         for key in env_keys:

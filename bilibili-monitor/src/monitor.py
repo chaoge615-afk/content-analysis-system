@@ -84,6 +84,8 @@ def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = "", 
     up_name: UP 主名称（用于按 UP 主分类转写输出）
     force_asr: 强制使用云 ASR（覆盖配置文件设置）
 
+    转写优先级：云 ASR > GPU 远程转写 > 本地 Whisper CPU
+
     返回: (success_count, failed_count)
     """
     # 检查是否使用云 ASR
@@ -92,8 +94,13 @@ def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = "", 
 
     if use_asr:
         return _trigger_transcribe_asr(m4a_dir, config, uid, up_name)
-    else:
-        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+
+    # 检查是否有 GPU 远程转写服务可用
+    gpu_url = os.getenv("GPU_SERVICE_URL", "")
+    if gpu_url:
+        return _trigger_transcribe_gpu_remote(m4a_dir, config, uid, up_name, gpu_url)
+
+    return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
 
 
 def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
@@ -172,6 +179,99 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
         return 0, result.failed
 
     return 0, 0
+
+
+def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name: str, gpu_url: str):
+    """委托 gpu-service 容器进行 GPU 转写（通过 HTTP API）"""
+    import requests
+
+    model_size = os.getenv('WHISPER_MODEL', config.get('whisper_model', 'medium'))
+
+    # GPU 远程转写：使用 /app/transcripts 共享目录（bilibili-monitor 和 gpu-service 都挂载）
+    up_safe = up_name.replace('/', '_').replace('\\', '_')
+    transcripts_dir = f"/app/transcripts/{up_safe}"
+
+    # 确保目录存在
+    Path(transcripts_dir).mkdir(parents=True, exist_ok=True)
+
+    # gpu-service 通过共享卷访问相同路径
+    gpu_downloads = m4a_dir          # /app/downloads/{up_name} (bilibili-data 卷)
+    gpu_transcripts = transcripts_dir  # /app/transcripts/{up_name} (host dir)
+
+    print(f"\n  转写 [GPU远程]: 委托 {gpu_url} (目录: {m4a_dir})")
+
+    try:
+        # 1. 提交转写任务
+        resp = requests.post(f"{gpu_url}/api/gpu/transcribe", json={
+            "downloads": gpu_downloads,
+            "transcripts": gpu_transcripts,
+            "model_size": model_size,
+            "device": "cuda",
+        }, timeout=30)
+
+        result = resp.json()
+        if not result.get("success"):
+            print(f"  ⚠️ GPU 转写提交失败: {result.get('error', '未知')}，回退到本地 Whisper")
+            return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+
+        # 2. 轮询等待完成
+        print(f"  ⏳ GPU 转写任务已提交，等待完成...")
+        while True:
+            time.sleep(5)
+            try:
+                status_resp = requests.get(f"{gpu_url}/api/gpu/status", timeout=10)
+                status = status_resp.json()
+                task = status.get("task", {})
+                task_status = task.get("status", "unknown")
+                progress = task.get("progress", {})
+
+                found = progress.get("found", 0)
+                success = progress.get("success", 0)
+                failed = progress.get("failed", 0)
+                current = progress.get("current", "")
+
+                if found > 0:
+                    print(f"    进度: {success + failed}/{found} (当前: {current[:30]})")
+
+                if task_status in ("done", "error", "idle"):
+                    break
+            except Exception as e:
+                print(f"  ⚠️ 轮询 GPU 状态失败: {e}")
+                break
+
+        # 3. 处理结果
+        if task.get("status") in ("done", "idle"):
+            import re
+            saved_bvids = []
+            scan_dir = Path(transcripts_dir)
+            for txt_file in scan_dir.glob("*.txt"):
+                m = re.search(r'\[(BV[a-zA-Z0-9]+)\]\.txt$', txt_file.name)
+                if m:
+                    saved_bvids.append(m.group(1))
+
+            success_count = len(saved_bvids)
+            if saved_bvids:
+                append_checkpoint(uid, '_done_bvid', saved_bvids)
+                dl_set = load_checkpoint(uid, '_downloaded')
+                if dl_set:
+                    remaining = dl_set - set(saved_bvids)
+                    dl_ck_path = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
+                    with open(dl_ck_path, 'w') as f:
+                        for bv in remaining:
+                            f.write(bv + '\n')
+
+            print(f"  ✅ GPU 远程转写完成: {success_count} 个文件成功, {failed} 个失败")
+            return success_count, failed
+        else:
+            print(f"  ⚠️ GPU 转写任务异常: {task.get('status')}")
+            return 0, 0
+
+    except requests.exceptions.ConnectionError:
+        print(f"  ⚠️ GPU 服务不可达 ({gpu_url})，回退到本地 Whisper")
+        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+    except Exception as e:
+        print(f"  ⚠️ GPU 远程转写异常: {e}，回退到本地 Whisper")
+        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
 
 
 def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str = ""):

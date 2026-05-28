@@ -21,6 +21,7 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - **目录整理**：共享模块移至 `shared/`，文档移至 `docs/`，bilibili-monitor `scripts/` 重命名为 `src/`（与 router-agent/text-to-sql 统一）
   - **意图分类错误提示**：LLM 调用失败时显示友好提示（额度不足/网络超时/其他异常），降级到语义查询
   - **UP主导入导出**：支持将 UP主 完整数据（配置、视频元数据、ChromaDB 向量、转写文本）打包为 ZIP，跨环境迁移（开发机→NAS）
+  - **采集触发 GPU 转写**：开发机点击"开始采集"自动委托 gpu-service 进行 GPU 转写（秒级），NAS 自动回退 CPU/ASR
 - **今日优化（2026-05-26）**：
   - Cookie 管理增强：前端保存/删除/测试 Cookie（B站 nav API 验证）、采集前预检
   - Cookie 注入修复：直接传内容而非文件路径（修复 volume 名不匹配问题）
