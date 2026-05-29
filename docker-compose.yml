@@ -211,7 +211,8 @@ services:
   # ============ 按需服务（非常驻） ============
 
   # bilibili-monitor（B站视频下载+转写+精炼）
-  # 启动方式: docker compose run --rm bilibili-monitor
+  # 注意：此服务仅用于构建镜像，实际采集通过前端按钮触发
+  # 不要在此服务启动时自动运行 monitor_all.py
   bilibili-monitor:
     build:
       context: .
@@ -244,7 +245,8 @@ services:
         condition: service_healthy
     restart: "no"
     mem_limit: 4g
-    command: python src/monitor_all.py
+    # 覆盖 Dockerfile 的 CMD：此服务仅用于构建镜像，不自动运行采集
+    command: ["echo", "bilibili-monitor 镜像就绪，等待前端触发采集..."]
 
   # bilibili-monitor 定时调度（每 6 小时自动运行）
   # 使用 docker:cli 镜像 + crond，挂载 Docker socket 调度 bilibili-monitor
