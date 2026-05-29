@@ -50,12 +50,12 @@ def process_transcripts(
 
     if not txt_files:
         print("没有找到 txt 文件")
-        return {"total": 0, "refined": 0, "db_ok": 0, "chroma_ok": 0}
+        return {"total": 0, "refined": 0, "db_ok": 0, "chroma_ok": 0, "cleaned": 0}
 
     print(f"\n处理 {len(txt_files)} 个转写文件...")
     videos_info = videos_info or {}
 
-    stats = {"total": len(txt_files), "refined": 0, "db_ok": 0, "chroma_ok": 0}
+    stats = {"total": len(txt_files), "refined": 0, "db_ok": 0, "chroma_ok": 0, "cleaned": 0}
 
     db = DBWriter()
     chroma = ChromaWriter()
@@ -120,8 +120,10 @@ def process_transcripts(
         }
         if db.insert_video(video_record):
             stats["db_ok"] += 1
+            db_ok_this = True
             print(f"  ✅ DuckDB 写入成功")
         else:
+            db_ok_this = False
             print(f"  ❌ DuckDB 写入失败")
 
         # 写入 ChromaDB
@@ -140,12 +142,22 @@ def process_transcripts(
         else:
             print(f"  ❌ ChromaDB 写入失败")
 
+        # 两个都写入成功后，自动删除转写中间产物（.txt 文件已入库，不再需要）
+        if db_ok_this and chroma_count > 0:
+            try:
+                txt_file.unlink()
+                print(f"  🗑️ 已删除转写文件")
+                stats["cleaned"] += 1
+            except Exception as e:
+                print(f"  ⚠️ 删除转写文件失败: {e}")
+
     db.close()
 
     print(f"\n{'='*50}")
     print(f"处理完成: {stats['db_ok']}/{stats['total']} DuckDB, "
           f"{stats['chroma_ok']}/{stats['total']} ChromaDB, "
-          f"{stats['refined']} 精炼成功")
+          f"{stats['refined']} 精炼成功, "
+          f"{stats['cleaned']} 已清理")
 
     return stats
 
