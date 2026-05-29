@@ -102,8 +102,9 @@ def _call_llm(prompt: str, max_tokens: int = 1500, temperature: float = 0.3) -> 
 
 
 def _clean_response(text: str) -> str:
-    """清除思考标签和格式说明残留"""
-    text = re.sub(r"<think>.*?\n\n", "", text, count=1)
+    """清除思考标签和格式说明残留（支持多行、多次出现）"""
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text)
+    text = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text)
     text = re.sub(r"<Thought>[\s\S]*?</Thought>", "", text)
     text = re.sub(r"【思考】[\s\S]*?【/思考】", "", text)
     return text.strip()

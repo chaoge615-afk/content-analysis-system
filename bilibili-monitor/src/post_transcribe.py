@@ -78,22 +78,33 @@ def process_transcripts(
         category = info.get('category', '')
         duration = info.get('duration', 0)
 
-        # 精炼
+        # 精炼（带外层重试机制，覆盖 429 限流场景）
         summary = None
+        auto_category = ""
         if not skip_refine and len(full_text) > 100:
             print(f"  精炼中...")
-            try:
-                summary, auto_category = refine_and_classify(full_text)
-                if summary:
-                    stats["refined"] += 1
-                    print(f"  ✅ 精炼完成")
-                    # 如果没有分类信息，使用自动分类
-                    if not category:
-                        category = auto_category
-                else:
-                    print(f"  ⚠️ 精炼失败，使用原文")
-            except Exception as e:
-                print(f"  ⚠️ 精炼异常: {e}")
+            for refine_attempt in range(3):
+                try:
+                    summary, auto_category = refine_and_classify(full_text)
+                    if summary:
+                        stats["refined"] += 1
+                        print(f"  ✅ 精炼完成")
+                        if not category:
+                            category = auto_category
+                        break
+                    else:
+                        if refine_attempt < 2:
+                            wait = 60 * (refine_attempt + 1)
+                            print(f"  ⚠️ 精炼失败，{wait}s 后重试 ({refine_attempt+1}/3)")
+                            time.sleep(wait)
+                except Exception as e:
+                    print(f"  ⚠️ 精炼异常: {e}")
+                    if refine_attempt < 2:
+                        wait = 60 * (refine_attempt + 1)
+                        print(f"  {wait}s 后重试 ({refine_attempt+1}/3)")
+                        time.sleep(wait)
+            if not summary:
+                print(f"  ⚠️ 精炼最终失败，使用原文")
 
         # 写入 DuckDB
         video_record = {

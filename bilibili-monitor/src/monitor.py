@@ -86,7 +86,7 @@ def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = "", 
 
     转写优先级：云 ASR > GPU 远程转写 > 本地 Whisper CPU
 
-    返回: (success_count, failed_count)
+    返回: (success_count, failed_count, transcripts_dir)
     """
     # 检查是否使用云 ASR
     asr_config = _load_asr_config()
@@ -117,7 +117,6 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
     m4a_path = Path(m4a_dir)
     output_dir = None
     if config.get('transcribe_output_dir', ''):
-        # 按 UP 主名分子目录
         up_safe = up_name.replace('/', '_').replace('\\', '_')
         try:
             output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
@@ -126,7 +125,7 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
             print(f"  ⚠️ 无法创建转写输出目录 {output_dir}，使用下载目录")
             output_dir = None
 
-    transcripts_dir = output_dir or m4a_path
+    transcripts_dir = str(output_dir or m4a_path)
 
     print(f"\n  转写 [云ASR]: 调用 process_directory_asr (目录: {m4a_dir})")
     try:
@@ -141,12 +140,12 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
         )
     except Exception as e:
         print(f"  ⚠️ 云 ASR 转写异常: {e}")
-        return 0, 0
+        return 0, 0, transcripts_dir
 
     # ── 处理转写结果 ──
     if result.found == 0:
         print(f"  ⚠️ 没有需要转写的文件")
-        return 0, 0
+        return 0, 0, transcripts_dir
 
     # 从输出目录读取新生成的 .txt 文件，提取 BVID
     import re
@@ -173,12 +172,12 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
                 for bv in remaining:
                     f.write(bv + '\n')
         print(f"  ✅ 云 ASR 转写完成: {success_count} 个文件 (跳过 {result.skipped} 个)")
-        return success_count, result.failed
+        return success_count, result.failed, transcripts_dir
 
     if result.failed > 0:
-        return 0, result.failed
+        return 0, result.failed, transcripts_dir
 
-    return 0, 0
+    return 0, 0, transcripts_dir
 
 
 def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name: str, gpu_url: str):
@@ -261,10 +260,10 @@ def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name
                             f.write(bv + '\n')
 
             print(f"  ✅ GPU 远程转写完成: {success_count} 个文件成功, {failed} 个失败")
-            return success_count, failed
+            return success_count, failed, transcripts_dir
         else:
             print(f"  ⚠️ GPU 转写任务异常: {task.get('status')}")
-            return 0, 0
+            return 0, 0, transcripts_dir
 
     except requests.exceptions.ConnectionError:
         print(f"  ⚠️ GPU 服务不可达 ({gpu_url})，回退到本地 Whisper")
@@ -287,7 +286,6 @@ def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str
     m4a_path = Path(m4a_dir)
     output_dir = None
     if config.get('transcribe_output_dir', ''):
-        # 按 UP 主名分子目录
         up_safe = up_name.replace('/', '_').replace('\\', '_')
         try:
             output_dir = Path(os.path.expanduser(config['transcribe_output_dir'])) / up_safe
@@ -295,6 +293,8 @@ def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str
         except (OSError, PermissionError):
             print(f"  ⚠️ 无法创建转写输出目录 {output_dir}，使用下载目录")
             output_dir = None
+
+    transcripts_dir = str(output_dir if output_dir else m4a_path)
 
     # 传入 done_bvid 文件路径，供 transcribe_local.py 预检跳过已转写的 m4a
     done_bvid_file = _checkpoint_path(uid, '_done_bvid')
@@ -316,12 +316,12 @@ def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str
         )
     except Exception as e:
         print(f"  ⚠️ 转写异常: {e}")
-        return 0, 0
+        return 0, 0, transcripts_dir
 
     # ── 处理转写结果 ──
     if result.no_file:
         print(f"  ⚠️ 目录为空，无 m4a 文件")
-        return 0, 0
+        return 0, 0, transcripts_dir
 
     # 从输出目录读取新生成的 .txt 文件，提取 BVID
     import re
@@ -348,17 +348,17 @@ def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str
                 for bv in remaining:
                     f.write(bv + '\n')
         print(f"  ✅ 转写完成: {success_count} 个文件")
-        return success_count, 0
+        return success_count, 0, transcripts_dir
 
     if result.has_work:
         # 部分失败：只标记成功的
         success_count = len(saved_bvids)
         for bv in saved_bvids:
             append_checkpoint(uid, '_done_bvid', [bv])
-        return success_count, result.failed
+        return success_count, result.failed, transcripts_dir
 
     # 异常情况
-    return 0, 0
+    return 0, 0, transcripts_dir
 
 
 def _load_asr_config() -> dict:
@@ -599,7 +599,7 @@ def main():
         if pending_transcribe and not newly_downloaded:
             print(f"\n  发现 {len(pending_transcribe)} 个已下载但未转写的视频，触发补转写")
 
-        transcribe_ok, transcribe_failed = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
+        transcribe_ok, transcribe_failed, actual_transcripts_dir = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
         print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
 
         # ── 精炼 + 入库（转写成功后） ──
@@ -620,13 +620,16 @@ def main():
                     'duration': v.get('duration', 0),
                 }
 
-            # 确定转写输出目录
-            trans_output = config.get('transcribe_output_dir', '')
-            if trans_output:
-                up_safe = up_name.replace('/', '_').replace('\\', '_')
-                scan_dir = os.path.join(os.path.expanduser(trans_output), up_safe)
+            # 确定转写输出目录（优先使用转写实际输出目录）
+            if actual_transcripts_dir and Path(actual_transcripts_dir).exists() and list(Path(actual_transcripts_dir).glob("*.txt")):
+                scan_dir = actual_transcripts_dir
             else:
-                scan_dir = output_dir
+                trans_output = config.get('transcribe_output_dir', '')
+                if trans_output:
+                    up_safe = up_name.replace('/', '_').replace('\\', '_')
+                    scan_dir = os.path.join(os.path.expanduser(trans_output), up_safe)
+                else:
+                    scan_dir = output_dir
 
             # GPU 远程转写时，txt 文件在 /app/transcripts/ 下，如果 scan_dir 没有 txt 则回退
             if not list(Path(scan_dir).glob("*.txt")):
