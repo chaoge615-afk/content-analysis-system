@@ -218,41 +218,57 @@ async def get_status():
 
 @app.get("/api/up_list")
 async def get_up_list():
-    """UP 主列表（从 DuckDB 读取，优先 up_info，回退 video_meta 聚合）"""
+    """UP 主列表（合并 up_info 统计 + YAML 配置文件）"""
     try:
         conn = _get_db()
         try:
-            # 优先从 up_info 表读取
-            up_count = conn.execute("SELECT COUNT(*) FROM up_info").fetchone()[0]
-            if up_count > 0:
-                rows = conn.execute(
-                    "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
-                ).fetchall()
-                return {
-                    "success": True,
-                    "data": [
-                        {"uid": r[0], "name": r[1], "total_videos": r[2], "last_update": str(r[3]) if r[3] else None}
-                        for r in rows
-                    ],
+            # 从 up_info 读取已有的统计数据
+            db_ups = {}
+            rows = conn.execute(
+                "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
+            ).fetchall()
+            for r in rows:
+                db_ups[str(r[0])] = {
+                    "uid": str(r[0]), "name": r[1],
+                    "total_videos": r[2],
+                    "last_update": str(r[3]) if r[3] else None,
                 }
 
-            # up_info 为空时，从 video_meta 聚合
-            rows = conn.execute(
-                """SELECT up_name, COUNT(*) as cnt
-                   FROM video_meta
-                   WHERE up_name IS NOT NULL AND up_name != '' AND up_name != 'unknown'
-                   GROUP BY up_name
-                   ORDER BY cnt DESC"""
-            ).fetchall()
-            return {
-                "success": True,
-                "data": [
-                    {"uid": "", "name": r[0], "total_videos": r[1], "last_update": None}
-                    for r in rows
-                ],
-            }
+            # 补充 video_meta 中有但 up_info 中没有的 UP主
+            if not db_ups:
+                vrows = conn.execute(
+                    """SELECT up_uid, up_name, COUNT(*) as cnt
+                       FROM video_meta
+                       WHERE up_name IS NOT NULL AND up_name != '' AND up_name != 'unknown'
+                       GROUP BY up_uid, up_name
+                       ORDER BY cnt DESC"""
+                ).fetchall()
+                for r in vrows:
+                    db_ups[str(r[0])] = {
+                        "uid": str(r[0]), "name": r[1],
+                        "total_videos": r[2], "last_update": None,
+                    }
         finally:
             conn.close()
+
+        # 合并 YAML 配置文件中的 UP主（新增的、还没有视频的）
+        for up in up_manager.list_ups():
+            uid = str(up.get("uid", ""))
+            if uid and uid not in db_ups:
+                db_ups[uid] = {
+                    "uid": uid, "name": up.get("name", ""),
+                    "total_videos": 0, "last_update": None,
+                    "domain": up.get("domain", "emotional"),
+                }
+            else:
+                # 补充 domain 信息
+                if uid in db_ups:
+                    db_ups[uid]["domain"] = up.get("domain", "emotional")
+
+        return {
+            "success": True,
+            "data": sorted(db_ups.values(), key=lambda x: x["total_videos"], reverse=True),
+        }
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
 
