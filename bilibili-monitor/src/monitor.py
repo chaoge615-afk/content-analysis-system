@@ -473,7 +473,7 @@ def main():
 
     # ── 获取视频列表 ──
     # 新UP主 或 done_bvid < 100（尚未完成全量采集）：全量扫描
-    max_count = 9999 if (is_new_up or len(done_bvids) < 100) else 30
+    max_count = 9999 if (is_new_up or len(done_bvid_set) < 100) else 30
     if args.max_videos > 0:
         max_count = min(max_count, args.max_videos)
     print(f"正在获取视频列表{'（全量）' if max_count > 30 else '（第一页）'}...")
