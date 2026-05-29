@@ -43,6 +43,8 @@ class MonitorTrigger:
         try:
             self._get_client()
             return True
+        except Exception:
+            return False
 
     def _cleanup_old_containers(self):
         """清理旧的触发容器（exit code 137 SIGKILL 后残留）"""
@@ -54,8 +56,6 @@ class MonitorTrigger:
                     c.remove(force=True)
         except Exception:
             pass
-        except Exception:
-            return False
 
     def check_cookie(self) -> dict:
         """
