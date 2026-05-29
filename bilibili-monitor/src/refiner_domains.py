@@ -117,6 +117,11 @@ def get_domain_config(domain: str) -> dict:
     return DOMAINS.get(domain, DOMAINS["emotional"])
 
 
+# === 向后兼容导出 ===
+CATEGORIES = DOMAINS["emotional"]["categories"]
+REFINE_PROMPT = DOMAINS["emotional"]["refine_prompt"]
+
+
 # === LLM 调用工具函数 ===
 
 def _call_llm(prompt: str, max_tokens: int = 1500, temperature: float = 0.3) -> Optional[str]:
