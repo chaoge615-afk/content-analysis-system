@@ -137,6 +137,7 @@ services:
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
       - GPU_SERVICE_URL=${GPU_SERVICE_URL:-}  # 开发机: http://gpu-service:8011，NAS: 空
+      - PROJECT_DIR=${PROJECT_DIR:-}  # 项目根目录（宿主机路径，用于挂载 transcripts/chromadb）
       - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
     volumes:
       - duckdb-data:/app/data

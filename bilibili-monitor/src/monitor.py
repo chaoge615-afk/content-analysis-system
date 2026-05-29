@@ -628,6 +628,13 @@ def main():
             else:
                 scan_dir = output_dir
 
+            # GPU 远程转写时，txt 文件在 /app/transcripts/ 下，如果 scan_dir 没有 txt 则回退
+            if not list(Path(scan_dir).glob("*.txt")):
+                up_safe = up_name.replace('/', '_').replace('\\', '_')
+                gpu_scan = f"/app/transcripts/{up_safe}"
+                if Path(gpu_scan).exists() and list(Path(gpu_scan).glob("*.txt")):
+                    scan_dir = gpu_scan
+
             print(f"\n  精炼 + 入库: 扫描 {scan_dir}")
             try:
                 stats = process_transcripts(

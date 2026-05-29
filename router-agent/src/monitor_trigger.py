@@ -160,7 +160,7 @@ class MonitorTrigger:
                 ]
 
                 # 挂载本地目录（需要知道 host 路径）
-                project_dir = os.getenv("PROJECT_DIR", "")
+                project_dir = os.getenv("PROJECT_DIR", "").replace("\\", "/")
                 if project_dir:
                     volumes.append(f"{project_dir}/bilibili-monitor/transcripts:/app/transcripts:rw")
                     volumes.append(f"{project_dir}/bilibili-monitor/chromadb:/app/chromadb:rw")
