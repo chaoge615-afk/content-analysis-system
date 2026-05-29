@@ -17,9 +17,24 @@ MAX_CONCURRENT_TRANSCRIBE = 2  # 最多同时转写几个 UP
 
 
 def find_all_configs():
-    """扫描 config/ 下所有 .yaml 文件"""
-    config_dir = SCRIPT_DIR.parent / "config"
-    return sorted(config_dir.glob("*.yaml"))
+    """扫描 config/ 下所有 .yaml 文件（优先环境变量，兼容 Docker 挂载）"""
+    config_dirs = []
+    # 优先使用环境变量指定的配置目录
+    env_dir = os.environ.get("BILIBILI_CONFIG_DIR", "")
+    if env_dir:
+        config_dirs.append(Path(env_dir))
+    # 默认配置目录
+    config_dirs.append(SCRIPT_DIR.parent / "config")
+
+    configs = []
+    seen = set()
+    for d in config_dirs:
+        if d.exists():
+            for f in d.glob("*.yaml"):
+                if f.stem not in seen:
+                    configs.append(f)
+                    seen.add(f.stem)
+    return sorted(configs, key=lambda p: p.stem)
 
 
 def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False):

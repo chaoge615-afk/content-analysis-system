@@ -232,11 +232,13 @@ services:
       - DATABASE_PATH=/app/data/content.db
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - BILIBILI_CONFIG_DIR=/app/bilibili-config
     volumes:
       - bilibili-data:/app/downloads
       - ./bilibili-monitor/transcripts:/app/transcripts
       - ./bilibili-monitor/chromadb:/app/chromadb
       - duckdb-data:/app/data
+      - ./bilibili-monitor/config:/app/bilibili-config
     depends_on:
       chromadb:
         condition: service_healthy
