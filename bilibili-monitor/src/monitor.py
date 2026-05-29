@@ -472,10 +472,11 @@ def main():
     print(f"{'(新 UP，全量扫描)' if is_new_up else '(增量扫描)'}\n")
 
     # ── 获取视频列表 ──
-    max_count = 9999 if is_new_up else 30
+    # 新UP主 或 done_bvid < 100（尚未完成全量采集）：全量扫描
+    max_count = 9999 if (is_new_up or len(done_bvids) < 100) else 30
     if args.max_videos > 0:
         max_count = min(max_count, args.max_videos)
-    print(f"正在获取视频列表{'（全量）' if is_new_up else '（第一页）'}...")
+    print(f"正在获取视频列表{'（全量）' if max_count > 30 else '（第一页）'}...")
     try:
         videos = get_video_list(uid, cookies, max_count=max_count)
         print(f"✓ 获取到 {len(videos)} 个视频\n")
