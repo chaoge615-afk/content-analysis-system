@@ -34,7 +34,7 @@ function App() {
   }, [messages]);
 
   // 处理发送消息
-  const handleSend = async (input: string) => {
+  const handleSend = async (input: string, domain?: string) => {
     // 添加用户消息
     const userMsg: Message = {
       id: `user-${Date.now()}`,
@@ -48,11 +48,11 @@ function App() {
     try {
       // 处理斜杠命令
       if (input.startsWith('/')) {
-        const response = await handleSlashCommand(input);
+        const response = await handleSlashCommand(input, domain);
         setMessages((prev) => [...prev, response]);
       } else {
         // 普通问答
-        const result = await chat(input);
+        const result = await chat(input, undefined, domain);
         const assistantMsg: Message = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
@@ -83,7 +83,7 @@ function App() {
   };
 
   // 处理斜杠命令
-  const handleSlashCommand = async (input: string): Promise<Message> => {
+  const handleSlashCommand = async (input: string, domain?: string): Promise<Message> => {
     const parts = input.split(/\s+/);
     const cmd = parts[0].toLowerCase();
 
@@ -144,7 +144,7 @@ function App() {
             timestamp: new Date(),
           };
         }
-        const result = await chat(question, 'structured');
+        const result = await chat(question, 'structured', domain);
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',
@@ -168,7 +168,7 @@ function App() {
             timestamp: new Date(),
           };
         }
-        const result = await chat(question, 'semantic');
+        const result = await chat(question, 'semantic', domain);
         return {
           id: `cmd-${Date.now()}`,
           role: 'assistant',

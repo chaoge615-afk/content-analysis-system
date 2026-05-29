@@ -1,6 +1,7 @@
 # B站UP主监控配置
 name: "恋爱教头桃姐"
 uid: "3546912280021515"
+domain: "emotional"
 cookie_file: "~/.bilibili/cookie.txt"
 download_root: "~/B站监控"
 

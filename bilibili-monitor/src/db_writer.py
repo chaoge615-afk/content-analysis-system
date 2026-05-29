@@ -13,10 +13,6 @@ class DBWriter:
     """DuckDB 数据写入器"""
 
     def __init__(self, db_path: str = None):
-        """
-        初始化数据库连接
-        db_path: 数据库文件路径，默认使用环境变量或 ./data/content.db
-        """
         if db_path is None:
             db_path = os.getenv('DUCKDB_PATH', './data/content.db')
 
@@ -25,10 +21,10 @@ class DBWriter:
 
         self.conn = duckdb.connect(str(self.db_path))
         self._init_tables()
+        self._migrate()
 
     def _init_tables(self):
         """初始化数据表"""
-        # video_meta 表：视频元数据
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS video_meta (
                 bvid TEXT PRIMARY KEY,
@@ -40,11 +36,11 @@ class DBWriter:
                 duration INT,
                 summary TEXT,
                 tags TEXT,
+                domain TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # up_info 表：UP 主信息
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS up_info (
                 uid TEXT PRIMARY KEY,
@@ -58,6 +54,14 @@ class DBWriter:
 
         self.conn.commit()
 
+    def _migrate(self):
+        """自动补列：给已有数据库添加 domain 列"""
+        cols = self.conn.execute("PRAGMA table_info('video_meta')").fetchall()
+        col_names = [c[1] for c in cols]
+        if 'domain' not in col_names:
+            self.conn.execute("ALTER TABLE video_meta ADD COLUMN domain TEXT DEFAULT ''")
+            self.conn.commit()
+
     def insert_video(self, video: Dict) -> bool:
         """
         插入或更新单条视频元数据
@@ -65,8 +69,8 @@ class DBWriter:
         """
         try:
             self.conn.execute("""
-                INSERT INTO video_meta (bvid, up_name, up_uid, title, publish_date, category, duration, summary, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO video_meta (bvid, up_name, up_uid, title, publish_date, category, duration, summary, tags, domain)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (bvid) DO UPDATE SET
                     up_name = EXCLUDED.up_name,
                     up_uid = EXCLUDED.up_uid,
@@ -75,7 +79,8 @@ class DBWriter:
                     category = EXCLUDED.category,
                     duration = EXCLUDED.duration,
                     summary = EXCLUDED.summary,
-                    tags = EXCLUDED.tags
+                    tags = EXCLUDED.tags,
+                    domain = EXCLUDED.domain
             """, [
                 video.get('bvid'),
                 video.get('up_name'),
@@ -86,6 +91,7 @@ class DBWriter:
                 video.get('duration'),
                 video.get('summary'),
                 video.get('tags'),
+                video.get('domain', ''),
             ])
             self.conn.commit()
             return True

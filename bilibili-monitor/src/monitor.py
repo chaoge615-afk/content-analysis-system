@@ -426,6 +426,7 @@ def main():
     uid = config['uid']
     cookie_file = os.path.expanduser(config['cookie_file'])
     download_root = os.path.expanduser(config.get('download_root', '~/B站监控'))
+    domain = config.get('domain', 'emotional')
 
     print(f"{'='*60}")
     print(f"开始监控: {up_name} (UID: {uid})")
@@ -535,6 +536,7 @@ def main():
                         'duration': v.get('duration', 0),
                         'summary': None,
                         'tags': v.get('tags', ''),
+                        'domain': domain,
                     })
 
                 success = db.insert_videos(video_records)
@@ -645,6 +647,7 @@ def main():
                     up_name=up_name,
                     up_uid=uid,
                     videos_info=videos_info,
+                    domain=domain,
                 )
                 print(f"  入库完成: {stats['db_ok']} DuckDB, {stats['chroma_ok']} ChromaDB, {stats['refined']} 精炼")
             except Exception as e:

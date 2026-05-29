@@ -63,6 +63,7 @@ def _get_db():
 class ChatRequest(BaseModel):
     question: str
     force_route: Optional[str] = None  # 强制路由: "sql" | "rag" | None(自动)
+    domain: Optional[str] = None  # 内容域: "emotional" | "career" | None(全部)
 
 
 class ChatResponse(BaseModel):
@@ -87,6 +88,7 @@ class CookieRequest(BaseModel):
 class AddUpRequest(BaseModel):
     url: str  # B站主页或视频链接
     whisper_model: Optional[str] = "small"  # Whisper 模型大小
+    domain: Optional[str] = "emotional"  # 内容域: emotional | career
 
 
 class UpdateUpRequest(BaseModel):
@@ -125,6 +127,10 @@ async def chat(req: ChatRequest):
     filters = intent.get("filters", {})
     reasoning = intent.get("reasoning", "")
     error_hint = intent.get("error_hint", "")
+
+    # 前端传入的 domain 注入到检索过滤条件
+    if req.domain:
+        filters["domain"] = req.domain
 
     # Step 2: 分发查询
     if route_type == "structured":
@@ -292,7 +298,7 @@ async def list_ups():
 @app.post("/api/up_info")
 async def add_up(req: AddUpRequest):
     """添加新 UP主（解析链接 → 获取信息 → 创建配置）"""
-    result = up_manager.add_up(req.url, req.whisper_model or "small")
+    result = up_manager.add_up(req.url, req.whisper_model or "small", req.domain or "emotional")
     return result
 
 

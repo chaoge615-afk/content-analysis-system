@@ -5,6 +5,7 @@
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -33,6 +34,7 @@ def process_transcripts(
     up_uid: str,
     videos_info: Dict[str, Dict] = None,
     skip_refine: bool = False,
+    domain: str = "emotional",
 ) -> Dict:
     """
     处理转写后的 txt 文件：精炼 + 入库
@@ -42,6 +44,7 @@ def process_transcripts(
     up_uid: UP 主 UID
     videos_info: 视频元数据字典 {bvid: {title, publish_date, category, duration, ...}}
     skip_refine: 跳过精炼（只入库不精炼）
+    domain: 内容域 (emotional/career)
 
     返回: 处理结果统计
     """
@@ -85,7 +88,7 @@ def process_transcripts(
             print(f"  精炼中...")
             for refine_attempt in range(3):
                 try:
-                    summary, auto_category = refine_and_classify(full_text)
+                    summary, auto_category = refine_and_classify(full_text, domain=domain)
                     if summary:
                         stats["refined"] += 1
                         print(f"  ✅ 精炼完成")
@@ -117,6 +120,7 @@ def process_transcripts(
             'duration': duration,
             'summary': summary,
             'tags': '',
+            'domain': domain,
         }
         if db.insert_video(video_record):
             stats["db_ok"] += 1
@@ -135,6 +139,7 @@ def process_transcripts(
             publish_date=str(pub_date) if pub_date else '',
             full_text=full_text,
             summary=summary,
+            domain=domain,
         )
         if chroma_count > 0:
             stats["chroma_ok"] += 1

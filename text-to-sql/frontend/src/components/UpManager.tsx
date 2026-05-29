@@ -16,6 +16,7 @@ export default function UpManager() {
   const [loading, setLoading] = useState(true);
   const [addUrl, setAddUrl] = useState('');
   const [whisperModel, setWhisperModel] = useState('small');
+  const [domain, setDomain] = useState('emotional');
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState<UpResolveResult | null>(null);
   const [adding, setAdding] = useState(false);
@@ -62,7 +63,7 @@ export default function UpManager() {
 
     setAdding(true);
     setError('');
-    const result = await addUp(addUrl.trim(), whisperModel);
+    const result = await addUp(addUrl.trim(), whisperModel, domain);
 
     if (result.success) {
       setSuccess(`✅ 已添加 UP主: ${resolved.name}`);
@@ -173,7 +174,7 @@ export default function UpManager() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-gray-900 truncate">{up.name}</div>
                   <div className="text-xs text-gray-500">
-                    {up.video_count ?? 0} 个视频 · {up.whisper_model}
+                    {up.video_count ?? 0} 个视频 · {up.whisper_model} · {up.domain === 'career' ? '💼求职' : '💕情感'}
                   </div>
                 </div>
               </div>
@@ -219,6 +220,14 @@ export default function UpManager() {
           >
             <option value="small">small</option>
             <option value="medium">medium</option>
+          </select>
+          <select
+            value={domain}
+            onChange={(e) => setDomain(e.target.value)}
+            className="px-2.5 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+          >
+            <option value="emotional">情感/两性</option>
+            <option value="career">求职/职场</option>
           </select>
           <button
             onClick={handleResolve}

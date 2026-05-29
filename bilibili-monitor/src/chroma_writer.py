@@ -1,5 +1,4 @@
 """ChromaDB writer for video transcripts and summaries."""
-
 import os
 import sys
 from pathlib import Path
@@ -22,28 +21,28 @@ class ChromaWriter:
     ):
         """
         Initialize ChromaDB writer with SiliconFlow embeddings.
-        支持本地持久化和远程 ChromaDB 容器两种模式。
-        设置 CHROMA_HOST 环境变量使用远程模式（与 RAG 服务共享）。
+        Supports local persistence and remote ChromaDB container modes.
+        Set CHROMA_HOST env var to use remote mode (shared with RAG service).
         """
 
         # Initialize SiliconFlow embeddings
         self.embeddings = SiliconFlowEmbeddings()
 
-        # 检查是否使用远程 ChromaDB
+        # Check for remote ChromaDB
         chroma_host = os.getenv("CHROMA_HOST")
         chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
 
         if chroma_host:
-            # 远程 ChromaDB 容器（与 RAG 服务共享）
+            # Remote ChromaDB container (shared with RAG service)
             self.client = chromadb.HttpClient(
                 host=chroma_host,
                 port=chroma_port,
                 settings=Settings(anonymized_telemetry=False),
             )
             self.persist_directory = f"remote://{chroma_host}:{chroma_port}"
-            print(f"[ChromaWriter] 连接远程 ChromaDB: {chroma_host}:{chroma_port}")
+            print(f"[ChromaWriter] Connected to remote ChromaDB: {chroma_host}:{chroma_port}")
         else:
-            # 本地持久化（开发模式）
+            # Local persistence (dev mode)
             if persist_directory is None:
                 persist_directory = os.getenv(
                     "CHROMA_PERSIST_DIR",
@@ -52,8 +51,7 @@ class ChromaWriter:
 
             Path(persist_directory).mkdir(parents=True, exist_ok=True)
 
-            # ChromaDB Rust 后端在 Windows 上不支持路径含非 ASCII 字符（如中文）
-            # 临时切换到 bilibili-monitor 目录，使用相对路径初始化
+            # ChromaDB Rust backend doesn't support non-ASCII paths on Windows
             _original_cwd = os.getcwd()
             _project_dir = str(Path(__file__).parent.parent)
             try:
@@ -67,16 +65,15 @@ class ChromaWriter:
                 os.chdir(_original_cwd)
 
             self.persist_directory = persist_directory
-            print(f"[ChromaWriter] 使用本地持久化: {persist_directory}")
+            print(f"[ChromaWriter] Using local persistence: {persist_directory}")
 
-        # Get or create collection（metadata 需与迁移脚本一致）
+        # Get or create collection
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
-            metadata={"description": "B站视频转写和精炼知识库"},
+            metadata={"description": "Bilibili video transcript and refinement knowledge base"},
         )
 
         self.collection_name = collection_name
-        self.persist_directory = persist_directory
 
     def add_documents(
         self,
@@ -85,10 +82,8 @@ class ChromaWriter:
         metadatas: Optional[List[dict]] = None,
     ):
         """Add documents to ChromaDB with embeddings."""
-        # Generate embeddings using SiliconFlow
         embeddings = self.embeddings.embed_documents(documents)
 
-        # Add to collection
         self.collection.add(
             ids=ids,
             documents=documents,
@@ -105,23 +100,11 @@ class ChromaWriter:
         publish_date: str,
         category: str = "",
         tags: str = "",
+        domain: str = "",
     ):
-        """
-        Add video content to ChromaDB.
-
-        Args:
-            bvid: Video BV ID
-            up_name: UP host name
-            title: Video title
-            content: Video transcript/summary content
-            publish_date: Publication date
-            category: Video category
-            tags: Video tags
-        """
-        # Generate unique ID
+        """Add video content to ChromaDB."""
         doc_id = f"{bvid}_{hash(content) % 10000:04d}"
 
-        # Prepare metadata
         metadata = {
             "bvid": bvid,
             "up_name": up_name,
@@ -129,10 +112,10 @@ class ChromaWriter:
             "publish_date": publish_date,
             "category": category,
             "tags": tags,
+            "domain": domain,
             "content_type": "full" if len(content) > 500 else "summary",
         }
 
-        # Add to collection
         self.add_documents(
             ids=[doc_id],
             documents=[content],
@@ -149,23 +132,9 @@ class ChromaWriter:
         full_text: Optional[str] = None,
         summary: Optional[str] = None,
         chunk_size: int = 500,
+        domain: str = "",
     ) -> int:
-        """
-        将视频内容分块写入 ChromaDB（全文分块 + 摘要单独存储）
-
-        Args:
-            bvid: 视频 BV ID
-            up_name: UP 主名称
-            title: 视频标题
-            category: 视频分类
-            publish_date: 发布日期
-            full_text: 完整转写文本（可选，会按 chunk_size 分块）
-            summary: 精炼摘要（可选，单独存储）
-            chunk_size: 每块最大字符数
-
-        Returns:
-            写入的文档数量
-        """
+        """Add video content to ChromaDB in chunks (full text chunks + summary)."""
         ids = []
         documents = []
         metadatas = []
@@ -176,6 +145,7 @@ class ChromaWriter:
             "title": title,
             "publish_date": publish_date or "",
             "category": category or "",
+            "domain": domain or "",
         }
 
         # 全文分块

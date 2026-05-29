@@ -473,7 +473,7 @@ class KnowledgeRAG:
         for key, value in metadata_filter.items():
             if not value:
                 continue
-            if key in ("up_name", "category", "bvid", "content_type"):
+            if key in ("up_name", "category", "bvid", "content_type", "domain"):
                 conditions.append({key: {"$eq": value}})
 
         if not conditions:

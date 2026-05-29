@@ -191,13 +191,16 @@ export async function triggerGpuTranscribe(
 /** 统一问答（对接 Router Agent） */
 export async function chat(
   question: string,
-  forceRoute?: string
+  forceRoute?: string,
+  domain?: string
 ): Promise<ChatResponse> {
   try {
-    const response = await api.post<ChatResponse>('/api/chat', {
+    const body: any = {
       question,
       force_route: forceRoute || null,
-    });
+    };
+    if (domain) body.domain = domain;
+    const response = await api.post<ChatResponse>('/api/chat', body);
     return response.data;
   } catch (error: any) {
     return {
@@ -369,6 +372,7 @@ export interface UpInfoDetailed {
   has_video: boolean;
   video_count?: number;
   face?: string;
+  domain?: string;
 }
 
 export interface UpResolveResult {
@@ -401,9 +405,9 @@ export async function listUps(): Promise<UpInfoDetailed[]> {
 }
 
 /** 添加新 UP主 */
-export async function addUp(url: string, whisperModel: string = 'small'): Promise<{ success: boolean; up_info?: UpInfoDetailed; error?: string }> {
+export async function addUp(url: string, whisperModel: string = 'small', domain: string = 'emotional'): Promise<{ success: boolean; up_info?: UpInfoDetailed; error?: string }> {
   try {
-    const response = await api.post('/api/up_info', { url, whisper_model: whisperModel });
+    const response = await api.post('/api/up_info', { url, whisper_model: whisperModel, domain });
     return response.data;
   } catch (error: any) {
     return { success: false, error: error.message || '请求失败' };

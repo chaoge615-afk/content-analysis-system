@@ -1,5 +1,6 @@
 name: "啊柚的碎碎念"
 uid: "3493258856499557"
+domain: "emotional"
 cookie_file: "~/.bilibili/cookie.txt"
 download_root: "~/B站监控"
 

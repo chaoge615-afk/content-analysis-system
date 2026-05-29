@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     "whisper_device": "cpu",  # NAS 用云 ASR，不需要本地 GPU
     "transcribe_output_dir": "",
     "notify_target": "",
+    "domain": "emotional",
 }
 
 # B站 API 配置
@@ -195,13 +196,14 @@ class UpManager:
             "error": f"UP主无视频或无法获取信息 (UID: {uid})",
         }
 
-    def add_up(self, url: str, whisper_model: str = "small") -> Dict:
+    def add_up(self, url: str, whisper_model: str = "small", domain: str = "emotional") -> Dict:
         """
         添加新 UP主：解析链接 → 获取信息 → 创建 YAML 配置
 
         Args:
             url: B站链接
             whisper_model: Whisper 模型大小 (tiny/base/small/medium)
+            domain: 内容域 (emotional/career)
 
         Returns:
             {
@@ -250,6 +252,7 @@ class UpManager:
             "name": name,
             "uid": uid,
             "whisper_model": whisper_model,
+            "domain": domain,
         }
 
         try:
@@ -264,6 +267,7 @@ class UpManager:
                     "face": profile.get("face", ""),
                     "config_file": config_path.name,
                     "whisper_model": whisper_model,
+                    "domain": domain,
                 },
             }
 
@@ -296,6 +300,7 @@ class UpManager:
                     "uid": str(cfg.get("uid", "")),
                     "name": cfg.get("name", yaml_file.stem),
                     "whisper_model": cfg.get("whisper_model", "small"),
+                    "domain": cfg.get("domain", "emotional"),
                     "config_file": yaml_file.name,
                     "has_video": False,  # 前端可查询 DuckDB 补充
                 })
