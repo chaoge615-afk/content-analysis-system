@@ -4,6 +4,7 @@
 扫描 config/ 下所有配置文件，逐一运行，汇总报告
 """
 import argparse
+import os
 import subprocess
 import sys
 import time
