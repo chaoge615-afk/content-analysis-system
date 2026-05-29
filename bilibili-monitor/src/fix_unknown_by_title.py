@@ -1,28 +1,25 @@
 """
 通过全量视频列表修复 unknown 归属
-从 B站 API 获取 UP主 的全量视频，用标题匹配修复 unknown 记录
+使用 yt-dlp + Cookie 获取 UP主 的全量视频，标题匹配修复 unknown 记录
 
-支持断点续传：每页结果实时保存到 data/{uid}_videos.json
+支持断点续传：每批标题实时保存到 data/{uid}_videos.json
 中断后重新运行自动从上次断点继续
 
 用法:
   python fix_unknown_by_title.py              # 处理全部 4 个 UP主
-  python fix_unknown_by_title.py --uid 3546912280021515  # 只处理指定 UP主
-  python fix_unknown_by_title.py --match-only            # 跳过 API 获取，只做匹配
+  python fix_unknown_by_title.py --uid 410110370  # 只处理指定 UP主
+  python fix_unknown_by_title.py --match-only      # 跳过获取，只做匹配
 """
 import os
 import sys
 import json
 import time
 import argparse
+import subprocess
 import duckdb
-import requests
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
-
-
-def get_db_path():
-    return os.getenv("DUCKDB_PATH", "/app/data/content.db")
+COOKIE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cookies', 'bilibili_cookies.txt')
 
 KNOWN_UPS = {
     "3546912280021515": "恋爱教头桃姐",
@@ -30,6 +27,10 @@ KNOWN_UPS = {
     "3493258856499557": "啊柚的碎碎念",
     "3546767933049757": "夹性学姐在这",
 }
+
+
+def get_db_path():
+    return os.getenv("DUCKDB_PATH", "/app/data/content.db")
 
 
 def clean_title(title):
@@ -45,120 +46,114 @@ def progress_path(uid):
 
 
 def load_progress(uid):
-    """加载已有进度，返回 (videos_list, last_page)"""
+    """加载已有进度"""
     path = progress_path(uid)
     if os.path.exists(path):
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        return data.get('videos', []), data.get('last_page', 0)
-    return [], 0
+        return data.get('videos', [])
+    return []
 
 
-def save_progress(uid, videos, last_page):
+def save_progress(uid, videos):
     """保存进度到文件"""
     path = progress_path(uid)
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
-        json.dump({'videos': videos, 'last_page': last_page}, f, ensure_ascii=False, indent=2)
+        json.dump({'videos': videos}, f, ensure_ascii=False, indent=2)
 
 
-def fetch_videos(uid, name, start_page=1):
-    """获取 UP主 的全量视频列表（支持断点续传）"""
-    videos, _ = load_progress(uid)
-    existing_bvids = {v['bvid'] for v in videos}
-    page = start_page
-    api_count = 0
-    retry_count = 0
-    max_retries = 5
+def yt_dlp_cmd():
+    """构建 yt-dlp 基础命令"""
+    cmd = ['yt-dlp']
+    if os.path.exists(COOKIE_FILE):
+        cmd.extend(['--cookies', COOKIE_FILE])
+    return cmd
 
-    print(f'{name} (uid={uid}): 已有 {len(videos)} 个视频, 从第 {start_page} 页继续\n')
 
-    while True:
+def get_all_bvids(uid, name):
+    """第一步：快速获取全部 bvid（flat-playlist，1次请求）"""
+    print(f'{name}: 获取视频列表...')
+    cmd = yt_dlp_cmd() + [
+        '--flat-playlist', '--print', '%(id)s',
+        f'https://space.bilibili.com/{uid}/video'
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    bvids = [l.strip() for l in result.stdout.strip().split('\n') if l.strip().startswith('BV')]
+    print(f'  共 {len(bvids)} 个视频')
+    return bvids
+
+
+def fetch_titles_for_bvids(bvids, existing_map, uid, name):
+    """第二步：批量获取标题（50个/批，支持断点续传）"""
+    videos = list(existing_map.values()) if existing_map else []
+    todo_start = len(videos)  # 已完成的索引位置
+    total = len(bvids)
+    batch_size = 50
+
+    if todo_start >= total:
+        print(f'  所有标题已获取, 跳过')
+        return videos
+
+    print(f'  需要获取 {total - todo_start} 个标题 (已有 {todo_start}), 每批 {batch_size} 个')
+
+    for batch_start in range(todo_start, total, batch_size):
+        batch_end = min(batch_start + batch_size, total)
+        print(f'  批次 [{batch_start+1}-{batch_end}/{total}] 获取中...', end=' ', flush=True)
+
+        cmd = yt_dlp_cmd() + [
+            '--playlist-start', str(batch_start + 1),
+            '--playlist-end', str(batch_end),
+            '--print', '%(id)s||%(title)s',
+            '--sleep-interval', '1',
+            '--max-sleep-interval', '3',
+            f'https://space.bilibili.com/{uid}/video'
+        ]
+
         try:
-            resp = requests.get(
-                'https://api.bilibili.com/x/space/arc/search',
-                params={
-                    'mid': uid,
-                    'ps': 30,
-                    'pn': page,
-                    'order': 'pubdate'
-                },
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
-                timeout=10
-            )
-            api_count += 1
-
-            if not resp.text or resp.status_code != 200:
-                print(f'  第 {page} 页: HTTP {resp.status_code}')
-                retry_count += 1
-                if retry_count >= max_retries:
-                    print(f'  {name}: 重试 {max_retries} 次后放弃, 已保存 {len(videos)} 个视频')
-                    save_progress(uid, videos, page - 1)
-                    return videos
-                wait = 30 * retry_count
-                print(f'  等待 {wait}s 后重试 ({retry_count}/{max_retries})...')
-                time.sleep(wait)
-                continue
-
-            data = resp.json()
-            if data.get('code') != 0:
-                msg = data.get('message', '')
-                print(f'  第 {page} 页 API 错误 (code={data.get("code")}): {msg}')
-                if '频繁' in msg or '请求' in msg or data.get('code') == -412:
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        print(f'  {name}: 重试 {max_retries} 次后放弃, 已保存 {len(videos)} 个视频')
-                        save_progress(uid, videos, page - 1)
-                        return videos
-                    wait = 60 * retry_count
-                    print(f'  [限流] 等待 {wait}s 后重试 ({retry_count}/{max_retries})...')
-                    time.sleep(wait)
-                    continue
-                else:
-                    break
-
-            retry_count = 0
-
-            vlist = data['data']['list']['vlist']
-            if not vlist:
-                print(f'  第 {page} 页: 无视频, 已到末尾')
-                break
-
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            lines = result.stdout.strip().split('\n')
             new_count = 0
-            for v in vlist:
-                if v['bvid'] not in existing_bvids:
-                    videos.append({
-                        'bvid': v['bvid'],
-                        'title': v['title'],
-                        'title_clean': clean_title(v['title'])
-                    })
-                    existing_bvids.add(v['bvid'])
-                    new_count += 1
+            for line in lines:
+                line = line.strip()
+                if '||' in line and line.startswith('BV'):
+                    parts = line.split('||', 1)
+                    bvid, title = parts[0], parts[1] if len(parts) > 1 else ''
+                    if title and title != 'NA' and bvid not in existing_map:
+                        v = {'bvid': bvid, 'title': title, 'title_clean': clean_title(title)}
+                        videos.append(v)
+                        existing_map[bvid] = v
+                        new_count += 1
 
-            print(f'  第 {page} 页: {len(vlist)} 个 (新增 {new_count}), 累计 {len(videos)} 个')
-
-            # 每页保存进度
-            save_progress(uid, videos, page)
-
-            page += 1
-
-            # 限流保护：页间间隔 8 秒
-            time.sleep(8)
+            save_progress(uid, videos)
+            print(f'{new_count} 个, 累计 {len(videos)}')
 
         except Exception as e:
-            print(f'  第 {page} 页 请求异常: {e}')
-            retry_count += 1
-            if retry_count >= max_retries:
-                print(f'  {name}: 重试 {max_retries} 次后放弃, 已保存 {len(videos)} 个视频')
-                save_progress(uid, videos, page - 1)
-                return videos
-            wait = 30 * retry_count
-            print(f'  等待 {wait}s 后重试 ({retry_count}/{max_retries})...')
-            time.sleep(wait)
+            print(f'失败: {e}')
+            save_progress(uid, videos)
+            print(f'  已保存 {len(videos)} 个, 可稍后继续')
 
-    # 全部完成后保存
-    save_progress(uid, videos, page)
-    print(f'{name}: 完成, 共 {len(videos)} 个视频\n')
+        # 批次间休息 3 秒
+        if batch_end < total:
+            time.sleep(3)
+
+    print(f'  {name}: 完成, 共 {len(videos)} 个视频\n')
+    return videos
+
+
+def fetch_videos(uid, name):
+    """获取 UP主 的全量视频列表（yt-dlp + Cookie）"""
+    # 加载已有进度
+    existing_videos = load_progress(uid)
+    existing_map = {v['bvid']: v for v in existing_videos}
+    print(f'{name} (uid={uid}): 已有 {len(existing_videos)} 个视频\n')
+
+    # 步骤1: 快速获取全部 bvid
+    bvids = get_all_bvids(uid, name)
+
+    # 步骤2: 逐视频获取标题（断点续传）
+    videos = fetch_titles_for_bvids(bvids, existing_map, uid, name)
+
     return videos
 
 
@@ -186,11 +181,23 @@ def match_and_fix(title_map):
         if title_clean in title_map:
             real_bvid, uid, up_name = title_map[title_clean]
 
-            conn.execute("""
-                UPDATE video_meta
-                SET up_name = ?, up_uid = ?, bvid = ?
-                WHERE bvid = ? AND up_name = 'unknown'
-            """, [up_name, uid, real_bvid, fake_bvid])
+            # 检查真实 bvid 是否已存在于数据库中
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM video_meta WHERE bvid = ?", [real_bvid]
+            ).fetchone()[0]
+
+            if existing > 0:
+                # 真实记录已存在，删除 unknown 重复记录
+                conn.execute(
+                    "DELETE FROM video_meta WHERE bvid = ? AND up_name = 'unknown'",
+                    [fake_bvid]
+                )
+            else:
+                conn.execute("""
+                    UPDATE video_meta
+                    SET up_name = ?, up_uid = ?, bvid = ?
+                    WHERE bvid = ? AND up_name = 'unknown'
+                """, [up_name, uid, real_bvid, fake_bvid])
 
             matched += 1
             matched_by_up[up_name] += 1
@@ -215,7 +222,7 @@ def match_and_fix(title_map):
 def main():
     parser = argparse.ArgumentParser(description='通过标题匹配修复 unknown 视频归属')
     parser.add_argument('--uid', help='只处理指定 UP主 (默认全部)')
-    parser.add_argument('--match-only', action='store_true', help='跳过 API 获取, 只从已有进度文件做匹配')
+    parser.add_argument('--match-only', action='store_true', help='跳过获取, 只从已有进度文件做匹配')
     args = parser.parse_args()
 
     if args.uid and args.uid not in KNOWN_UPS:
@@ -227,19 +234,19 @@ def main():
 
     if not args.match_only:
         print(f'=== 步骤 1: 获取 {len(uids_to_fetch)} 个 UP主 的视频列表 ===\n')
+        cookie_status = "存在" if os.path.exists(COOKIE_FILE) else "不存在"
+        print(f'Cookie 文件: {COOKIE_FILE} ({cookie_status})\n')
 
         for uid in uids_to_fetch:
             name = KNOWN_UPS[uid]
-            videos, last_page = load_progress(uid)
-            start_page = last_page + 1 if last_page > 0 else 1
-            fetch_videos(uid, name, start_page)
+            fetch_videos(uid, name)
 
     # 构建标题映射表（从所有进度文件加载）
     print('\n=== 构建标题映射表 ===')
     title_map = {}
 
     for uid, name in KNOWN_UPS.items():
-        videos, _ = load_progress(uid)
+        videos = load_progress(uid)
         for v in videos:
             title_map[v['title_clean']] = (v['bvid'], uid, name)
         print(f'  {name}: {len(videos)} 个视频')
