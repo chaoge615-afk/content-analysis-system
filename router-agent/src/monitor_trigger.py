@@ -43,6 +43,17 @@ class MonitorTrigger:
         try:
             self._get_client()
             return True
+
+    def _cleanup_old_containers(self):
+        """清理旧的触发容器（exit code 137 SIGKILL 后残留）"""
+        try:
+            client = self._get_client()
+            containers = client.containers.list(all=True)
+            for c in containers:
+                if c.name.startswith("bilibili-monitor-") and c.status == "exited":
+                    c.remove(force=True)
+        except Exception:
+            pass
         except Exception:
             return False
 
@@ -120,6 +131,9 @@ class MonitorTrigger:
         params = params or {}
 
         with self._lock:
+            # 清理旧的触发容器（避免残留）
+            self._cleanup_old_containers()
+
             # 预检：Cookie 配置
             cookie_check = self.check_cookie()
             if not cookie_check["ok"]:

@@ -3,11 +3,13 @@
 ## 项目概述
 B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
-## 当前状态（2026-05-27）
-- Phase 1-8 全部完成（133/133 任务）✅
-- Phase 9 进行中（混合转录架构：NAS下载 + 开发机GPU转录 + 飞牛Sync）
-  - **9.2 Docker GPU 直通完成**：`gpu-service` 容器自动启动，RTX 4060 (8188MB) CUDA 12.4 直通验证通过
-- **Phase 10 完成**（前端 UP主管理 + NAS 云 ASR 转写，17/17 任务）✅
+## 当前状态（2026-05-29）
+- Phase 1-10 全部完成（154/154 任务）✅
+- **内容域分离架构已上线**：情感(`emotional`) + 求职(`career`) 双轨精炼 + 检索隔离
+  - 新增 `refiner_domains.py`：独立 prompt + 分类体系（32 情感 + 18 求职）
+  - 全链路 domain 字段：YAML → DuckDB → ChromaDB → RAG where-filter
+  - 前端 domain 选择器：UP主管理 + 对话页
+- **unknown 归属修复完成**：yt-dlp + Cookie 方案，1158 → 9（99.2%）
   - **UP主管理**：前端输入 B站链接 → 解析预览（名称/UID/头像）→ 选模型 → 写入 YAML 配置
   - **云 ASR 转写**：硅基流动 SenseVoiceSmall（免费）替代本地 Whisper，JSON 设置/用量存储 + 预算上限 + 手动开关
   - 新增模块：`up_manager.py`、`asr_manager.py`、`transcribe_asr.py`
@@ -62,8 +64,8 @@ B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(
   - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
   - npm: 淘宝镜像 (`registry.npmmirror.com`)
 - **每次 Docker 镜像重建后，清理构建缓存**：`docker builder prune -a -f`（释放磁盘空间）
-- **每完成一个任务点，立即更新 `docs/开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等），然后 git commit 并 push**
-- 完成开发后立即 push，避免本地未提交的改动与其他会话冲突
+- **每完成一个任务点，立即更新 `docs/开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等）**
+- **修改代码后，必须先重建 Docker 镜像、重启服务、验证功能正常，确认无误后再 git commit 并 push**（避免将有明显 bug 的代码推送到远程，影响其他会话或 NAS 端部署）
 
 ## 关键文件
 - `docs/开发计划.md` - 任务清单和进度（剩余任务在 Phase 8.5）
