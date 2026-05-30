@@ -319,6 +319,8 @@ class MonitorTrigger:
         cmd = ["python", "src/monitor_all.py"]
         if params.get("max_videos"):
             cmd.extend(["--max-videos", str(params["max_videos"])])
+        if params.get("batch_size"):
+            cmd.extend(["--batch-size", str(params["batch_size"])])
         if params.get("asr"):
             cmd.append("--asr")
         # 支持多选 UP主（up_names 列表）

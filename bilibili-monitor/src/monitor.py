@@ -418,6 +418,7 @@ def main():
     parser.add_argument('--no-notify', action='store_true', help='跳过 QQ 通知')
     parser.add_argument('--metadata-only', action='store_true', help='只获取元数据写入DuckDB，不下载不转写')
     parser.add_argument('--max-videos', type=int, default=0, help='最多处理视频数（0=不限制）')
+    parser.add_argument('--batch-size', type=int, default=30, help='分批处理大小（下载→转写→入库→清理，默认30）')
     parser.add_argument('--asr', action='store_true', help='强制使用云 ASR 转写（覆盖配置文件设置）')
     args = parser.parse_args()
 
@@ -494,16 +495,7 @@ def main():
 
     if not new_videos:
         print("没有发现新视频")
-        # 检查是否有已下载但未转写的视频，如果有则继续转写流程
-        pending = downloaded_set - done_bvid_set
-        if pending and not args.no_transcribe:
-            print(f"但有 {len(pending)} 个已下载未转写的视频，进入转写流程")
-            newly_downloaded = []
-            # 跳过下载，直接进入转写
-            safe_name = up_name.replace('/', '_').replace('\\', '_')
-            output_dir = os.path.join(download_root, safe_name)
-        else:
-            sys.exit(0)
+        sys.exit(0)
     else:
         print(f"发现 {len(new_videos)} 个新视频:\n")
         for i, v in enumerate(new_videos, 1):
@@ -552,64 +544,83 @@ def main():
 
             sys.exit(0)
 
-        # ── 下载 ──
+        # ── 分批处理：下载 → 转写 → 精炼入库 → 清理 ──
         from download_videos import download_video
 
         safe_name = up_name.replace('/', '_').replace('\\', '_')
         output_dir = os.path.join(download_root, safe_name)
         os.makedirs(output_dir, exist_ok=True)
 
-        newly_downloaded = []   # [(bvid, title), ...]
-        for i, v in enumerate(new_videos, 1):
-            bvid = v['bvid']
-            title = v['title']
-            url = f"https://www.bilibili.com/video/{bvid}"
+        batch_size = args.batch_size or 30
+        total_new = len(new_videos)
 
-            print(f"[{i}/{len(new_videos)}] 下载: {title}")
-            ok = download_video(url, output_dir, cookie_file)
+        # 先检查遗留的已下载未转写文件
+        pending_set = load_checkpoint(uid, '_downloaded') - load_checkpoint(uid, '_done_bvid')
+        if pending_set:
+            print(f"\n  🧹 清理 {len(pending_set)} 个遗留的下载文件...")
+            for old_bvid in pending_set:
+                pattern = os.path.join(output_dir, f'*[{old_bvid}]*')
+                for f in Path(output_dir).glob(f'*[{old_bvid}]*'):
+                    try:
+                        f.unlink()
+                        print(f'    已删除: {f.name[:50]}')
+                    except Exception:
+                        pass
+            # 清理 downloaded checkpoint
+            dl_ck = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
+            remain = load_checkpoint(uid, '_downloaded') - pending_set
+            with open(dl_ck, 'w') as f:
+                for bv in remain: f.write(bv + '\n')
 
-            if ok:
-                newly_downloaded.append((bvid, title))
-                append_checkpoint(uid, '_downloaded', [bvid])
-                print(f"  ✓ 完成 (已记入 downloaded)")
-            else:
-                print(f"  ✗ 失败")
+        for batch_start in range(0, total_new, batch_size):
+            batch_end = min(batch_start + batch_size, total_new)
+            batch = new_videos[batch_start:batch_end]
+            batch_num = batch_start // batch_size + 1
+            total_batches = (total_new + batch_size - 1) // batch_size
 
-            if i < len(new_videos):
-                time.sleep(3)
+            print(f"\n{'='*60}")
+            print(f"📦 批次 {batch_num}/{total_batches} [{batch_start+1}-{batch_end}/{total_new}]")
+            print(f"{'='*60}")
 
-        print(f"\n{'='*60}")
-        print(f"下载完成: {len(newly_downloaded)}/{len(new_videos)} 成功")
-        print(f"{'='*60}")
+            # 1. 下载
+            newly_downloaded = []
+            for i, v in enumerate(batch, 1):
+                bvid = v['bvid']
+                title = v['title']
+                url = f"https://www.bilibili.com/video/{bvid}"
 
-    # ── 转写 ──
-    # 检查是否有已下载但未转写的视频（上次转写失败的情况）
-    dl_set = load_checkpoint(uid, '_downloaded')
-    done_set = load_checkpoint(uid, '_done_bvid')
-    pending_transcribe = dl_set - done_set
+                print(f"  [{i}/{len(batch)}] 下载: {title}")
+                ok = download_video(url, output_dir, cookie_file)
 
-    if (newly_downloaded or pending_transcribe) and not args.no_transcribe:
-        # 转写前预检：把 downloaded 中已在 done_bvid 的 BVID 移走（避免重复转写）
-        already_done = dl_set & done_set
-        if already_done:
-            print(f"  [预检] 从 downloaded 移除 {len(already_done)} 个已转写 BVID")
-            remaining = dl_set - already_done
-            dl_ck_path = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
-            with open(dl_ck_path, 'w') as f:
-                for bv in remaining:
-                    f.write(bv + '\n')
+                if ok:
+                    newly_downloaded.append((bvid, title))
+                    append_checkpoint(uid, '_downloaded', [bvid])
+                    print(f"    ✓ 完成")
+                else:
+                    print(f"    ✗ 失败")
 
-        if pending_transcribe and not newly_downloaded:
-            print(f"\n  发现 {len(pending_transcribe)} 个已下载但未转写的视频，触发补转写")
+                if i < len(batch):
+                    time.sleep(2)
 
-        transcribe_ok, transcribe_failed, actual_transcripts_dir = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
-        print(f"  转写结果: {transcribe_ok} 成功, {transcribe_failed} 失败")
+            if not newly_downloaded:
+                print(f"  本批下载均失败，跳过转写")
+                continue
 
-        # ── 精炼 + 入库（转写成功后） ──
-        if transcribe_ok > 0:
+            print(f"  下载: {len(newly_downloaded)}/{len(batch)} 成功")
+
+            # 2. 转写
+            if args.no_transcribe:
+                continue
+
+            transcribe_ok, transcribe_failed, actual_transcripts_dir = trigger_transcribe(output_dir, config, uid, up_name, force_asr=args.asr)
+            print(f"  转写: {transcribe_ok} 成功, {transcribe_failed} 失败")
+
+            if transcribe_ok == 0:
+                continue
+
+            # 3. 精炼 + 入库
             from post_transcribe import process_transcripts
 
-            # 准备视频元数据（用于入库时附加）
             videos_info = {}
             for v in new_videos:
                 pub_date = None
@@ -623,7 +634,6 @@ def main():
                     'duration': v.get('duration', 0),
                 }
 
-            # 确定转写输出目录（优先使用转写实际输出目录）
             if actual_transcripts_dir and Path(actual_transcripts_dir).exists() and list(Path(actual_transcripts_dir).glob("*.txt")):
                 scan_dir = actual_transcripts_dir
             else:
@@ -634,14 +644,13 @@ def main():
                 else:
                     scan_dir = output_dir
 
-            # GPU 远程转写时，txt 文件在 /app/transcripts/ 下，如果 scan_dir 没有 txt 则回退
             if not list(Path(scan_dir).glob("*.txt")):
                 up_safe = up_name.replace('/', '_').replace('\\', '_')
                 gpu_scan = f"/app/transcripts/{up_safe}"
                 if Path(gpu_scan).exists() and list(Path(gpu_scan).glob("*.txt")):
                     scan_dir = gpu_scan
 
-            print(f"\n  精炼 + 入库: 扫描 {scan_dir}")
+            print(f"  精炼 + 入库: 扫描 {scan_dir}")
             try:
                 stats = process_transcripts(
                     transcript_dir=scan_dir,
@@ -650,13 +659,38 @@ def main():
                     videos_info=videos_info,
                     domain=domain,
                 )
-                print(f"  入库完成: {stats['db_ok']} DuckDB, {stats['chroma_ok']} ChromaDB, {stats['refined']} 精炼")
+                print(f"  入库: {stats['db_ok']} DuckDB, {stats['chroma_ok']} ChromaDB, {stats['refined']} 精炼, {stats['cleaned']} 已清理")
             except Exception as e:
                 print(f"  ⚠️ 精炼+入库异常: {e}")
+                continue
 
-    # ── QQ 通知（下载成功后） ──
-    if newly_downloaded and not args.no_notify:
-        notify_new_videos(up_name, new_videos, config)
+            # 4. 更新 done_bvid（completed this batch）
+            for bvid, _ in newly_downloaded:
+                append_checkpoint(uid, '_done_bvid', [bvid])
+
+            # 清理 downloaded checkpoint
+            dl_set = load_checkpoint(uid, '_downloaded')
+            done_set = load_checkpoint(uid, '_done_bvid')
+            dl_ck = os.path.expanduser(_checkpoint_path(uid, '_downloaded'))
+            with open(dl_ck, 'w') as f:
+                for bv in (dl_set - done_set):
+                    f.write(bv + '\n')
+
+            # 清理本批音频文件
+            for bvid, _ in newly_downloaded:
+                pattern = os.path.join(output_dir, f'*[{bvid}]*')
+                for f in Path(output_dir).glob(f'*[{bvid}]*'):
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+
+            if batch_end < total_new and newly_downloaded:
+                time.sleep(5)  # 批次间短暂休息
+
+        # ── QQ 通知（全部完成后） ──
+        if not args.no_notify:
+            notify_new_videos(up_name, new_videos, config)
 
 
 if __name__ == '__main__':
