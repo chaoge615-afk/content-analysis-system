@@ -99,15 +99,16 @@ async def ask_video(req: AskVideoRequest):
 
     try:
         rag = get_rag()
-        answer = rag.ask_video(
+        answer, sources = rag.ask_video(
             req.question,
             metadata_filter=req.filters,
             use_hybrid=req.use_hybrid,
+            return_sources=True,
         )
         return {
             "answer": answer,
             "route_type": "semantic",
-            "sources": [],  # 后续可扩展返回引用来源
+            "sources": sources,
         }
     except Exception as e:
         return {

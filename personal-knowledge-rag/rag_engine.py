@@ -274,7 +274,8 @@ class KnowledgeRAG:
         question: str,
         metadata_filter: dict = None,
         use_hybrid: bool = True,
-    ) -> str:
+        return_sources: bool = False,
+    ):
         """
         针对 video_knowledge 的问答（支持 metadata 过滤 + 混合检索）
 
@@ -284,7 +285,8 @@ class KnowledgeRAG:
             use_hybrid: 是否使用 BM25+向量混合检索
         """
         if self.video_vector_db._collection.count() == 0:
-            return "视频知识库还是空的，请先加载视频精炼内容"
+            empty_msg = "视频知识库还是空的，请先加载视频精炼内容"
+            return (empty_msg, []) if return_sources else empty_msg
 
         # 提取 keywords 用于增强查询文本（不传给 ChromaDB where filter）
         query_text = question
@@ -310,10 +312,14 @@ class KnowledgeRAG:
             docs = retriever.invoke(query_text)
 
         if not docs:
+            if return_sources:
+                return "在视频知识库中没有找到相关内容", []
             return "在视频知识库中没有找到相关内容"
 
-        # 拼接上下文（附带来源信息）
+        # 拼接上下文（附带来源信息）+ 收集 sources
         context_parts = []
+        sources = []
+        seen_bvids = set()
         for doc in docs:
             meta = doc.metadata
             source_info = ""
@@ -323,6 +329,17 @@ class KnowledgeRAG:
                 source_info += f"[分类: {meta['category']}] "
             if meta.get("bvid"):
                 source_info += f"[BV号: {meta['bvid']}] "
+                # 收集去重的来源信息
+                bvid = meta["bvid"]
+                if bvid not in seen_bvids:
+                    seen_bvids.add(bvid)
+                    sources.append({
+                        "bvid": bvid,
+                        "title": meta.get("title", ""),
+                        "up_name": meta.get("up_name", ""),
+                        "category": meta.get("category", ""),
+                        "url": f"https://www.bilibili.com/video/{bvid}",
+                    })
             context_parts.append(
                 f"{source_info}\n{doc.page_content}" if source_info else doc.page_content
             )
@@ -366,15 +383,17 @@ class KnowledgeRAG:
                         text_parts.append(block.text)
                 content = "\n".join(text_parts) if text_parts else ""
             if not content:
-                return "LLM 返回的内容为空，请检查 API 配置"
+                empty_msg = "LLM 返回的内容为空，请检查 API 配置"
+                return (empty_msg, sources) if return_sources else empty_msg
 
             # 过滤掉思考过程标签
             content = re.sub(
                 r"<think>.*?</think>", "", content, flags=re.DOTALL
             ).strip()
-            return content
+            return (content, sources) if return_sources else content
         except Exception as e:
-            return f"调用 LLM 时出错: {str(e)}"
+            err_msg = f"调用 LLM 时出错: {str(e)}"
+            return (err_msg, sources) if return_sources else err_msg
 
     def ask(
         self,

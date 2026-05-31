@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import ChatInput from './components/ChatInput';
-import ChatMessage from './components/ChatMessage';
+import ChatMessage, { SourceItem } from './components/ChatMessage';
 import StatusPanel from './components/StatusPanel';
 import AdminPanel from './components/AdminPanel';
 import { chat, getUpList, getRecent, getCategories, getStatus } from './services/api';
@@ -16,6 +16,7 @@ interface Message {
   reasoning?: string;
   responseTime?: number;
   quickView?: { type: 'status' | 'up_list' | 'recent' | 'categories'; data: any };
+  sources?: SourceItem[];
   timestamp: Date;
 }
 
@@ -62,6 +63,7 @@ function App() {
           sqlResult: result.sql_result,
           reasoning: result.reasoning,
           responseTime: result.response_time,
+          sources: result.sources,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
@@ -176,6 +178,7 @@ function App() {
           routeType: result.route_type,
           reasoning: '强制走 RAG',
           responseTime: result.response_time,
+          sources: result.sources,
           timestamp: new Date(),
         };
       }
@@ -306,6 +309,7 @@ function App() {
                       reasoning={msg.reasoning}
                       responseTime={msg.responseTime}
                       quickView={msg.quickView}
+                      sources={msg.sources}
                     />
                   ))}
                   {loading && (
