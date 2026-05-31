@@ -26,3 +26,19 @@ body {
   background: #9ca3af;
 }
 
+/* Markdown 内容基础样式 */
+.markdown-body {
+  font-size: 15px;
+  line-height: 1.75;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+

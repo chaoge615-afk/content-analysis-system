@@ -136,10 +136,10 @@ export default function ChatMessage({
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-[80%] ${isUser ? 'order-2' : ''}`}>
+      <div className={`${isUser ? 'max-w-[60%]' : 'max-w-[85%]'} ${isUser ? 'order-2' : ''}`}>
         {/* 消息气泡 */}
         <div
-          className={`rounded-2xl px-4 py-3 relative ${
+          className={`rounded-2xl px-5 py-4 relative ${
             isUser
               ? 'bg-blue-600 text-white rounded-br-md'
               : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'
@@ -167,7 +167,7 @@ export default function ChatMessage({
               {content}
             </div>
           ) : (
-            <div className="text-sm markdown-body leading-relaxed">
+            <div className="markdown-body">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
@@ -188,39 +188,51 @@ export default function ChatMessage({
                     const isInline = !className;
                     if (isInline) {
                       return (
-                        <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-xs font-mono">
+                        <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-[13px] font-mono">
                           {children}
                         </code>
                       );
                     }
                     return (
-                      <code className={`${className || ''} text-xs font-mono`} {...props}>
+                      <code className={`${className || ''} text-[13px] font-mono`} {...props}>
                         {children}
                       </code>
                     );
                   },
                   pre: ({ children }) => (
-                    <pre className="bg-gray-50 p-3 rounded-lg overflow-x-auto border border-gray-200 my-2">
+                    <pre className="bg-gray-50 p-3 rounded-lg overflow-x-auto border border-gray-200 my-3">
                       {children}
                     </pre>
                   ),
-                  // 列表样式
-                  ul: ({ children }) => <ul className="list-disc pl-5 my-1.5 space-y-0.5">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal pl-5 my-1.5 space-y-0.5">{children}</ol>,
+                  // 列表样式 — 宽松间距
+                  ul: ({ children }) => <ul className="list-disc pl-6 my-3 space-y-2.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-6 my-3 space-y-3">{children}</ol>,
+                  // 列表项 — 增加内部间距
+                  li: ({ children }) => (
+                    <li className="leading-7 pl-0.5">
+                      {children}
+                    </li>
+                  ),
                   // 标题样式
-                  h1: ({ children }) => <h1 className="text-lg font-bold mt-3 mb-1.5">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-base font-bold mt-2.5 mb-1">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>,
-                  // 粗体
-                  strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                  h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2 text-gray-900">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base font-bold mt-3.5 mb-1.5 text-gray-900">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-[15px] font-bold mt-3 mb-1 text-gray-900">{children}</h3>,
+                  // 粗体 — 在列表项内作为小标题更突出
+                  strong: ({ children }) => (
+                    <strong className="font-bold text-gray-900">{children}</strong>
+                  ),
                   // 引用
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-blue-200 pl-3 py-0.5 my-2 text-gray-600 italic">
+                    <blockquote className="border-l-4 border-blue-200 pl-4 py-1 my-3 text-gray-600 italic bg-blue-50/50 rounded-r-lg">
                       {children}
                     </blockquote>
                   ),
-                  // 段落
-                  p: ({ children }) => <p className="my-1.5">{children}</p>,
+                  // 段落 — 宽松段间距
+                  p: ({ children }) => <p className="my-2.5 leading-7">{children}</p>,
+                  // 水平线
+                  hr: () => <hr className="my-4 border-gray-200" />,
+                  // 分隔线样式
+                  br: () => <br />,
                 }}
               >
                 {content}
