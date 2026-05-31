@@ -1,87 +1,55 @@
 # 智能内容分析系统 - 项目约束
 
 ## 项目概述
-B站情感博主视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
+B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
-## 当前状态（2026-05-29）
-- Phase 1-10 全部完成（154/154 任务）✅
-- **内容域分离架构已上线**：情感(`emotional`) + 求职(`career`) 双轨精炼 + 检索隔离
-  - 新增 `refiner_domains.py`：独立 prompt + 分类体系（32 情感 + 18 求职）
-  - 全链路 domain 字段：YAML → DuckDB → ChromaDB → RAG where-filter
-  - 前端 domain 选择器：UP主管理 + 对话页
-- **unknown 归属修复完成**：yt-dlp + Cookie 方案，1158 → 9（99.2%）
-  - **UP主管理**：前端输入 B站链接 → 解析预览（名称/UID/头像）→ 选模型 → 写入 YAML 配置
-  - **云 ASR 转写**：硅基流动 SenseVoiceSmall（免费）替代本地 Whisper，JSON 设置/用量存储 + 预算上限 + 手动开关
-  - 新增模块：`up_manager.py`、`asr_manager.py`、`transcribe_asr.py`
-  - 新增 API：7 个端点（UP主 4 + ASR 3）
-  - 新增组件：`UpManager.tsx`、GpuTranscribe ASR 区域
-- P0 完成：bilibili-monitor 全流程验证通过
-- P1 完成：checkpoint 简化（UID 命名）+ SDK 统一（Anthropic）
-- P2 完成：采集触发按钮 + 查询日志可视化 + 服务监控仪表盘
-- **今日优化（2026-05-28）**：
-  - **Cookie 状态修复**：测试过期后状态指示器正确显示红色 + "已过期"标签，采集按钮禁用
-  - **目录整理**：共享模块移至 `shared/`，文档移至 `docs/`，bilibili-monitor `scripts/` 重命名为 `src/`（与 router-agent/text-to-sql 统一）
-  - **意图分类错误提示**：LLM 调用失败时显示友好提示（额度不足/网络超时/其他异常），降级到语义查询
-  - **UP主导入导出**：支持将 UP主 完整数据（配置、视频元数据、ChromaDB 向量、转写文本）打包为 ZIP，跨环境迁移（开发机→NAS）
-  - **采集触发 GPU 转写**：开发机点击"开始采集"自动委托 gpu-service 进行 GPU 转写（秒级），NAS 自动回退 CPU/ASR
-- **今日优化（2026-05-26）**：
-  - Cookie 管理增强：前端保存/删除/测试 Cookie（B站 nav API 验证）、采集前预检
-  - Cookie 注入修复：直接传内容而非文件路径（修复 volume 名不匹配问题）
-  - 服务监控优化：SQL统计改DuckDB直查 + Docker stats并行采集（23s→2.2s）
-  - 快捷指令美化：新增 QuickView 组件，结构化展示 status/up_list/recent/categories
-  - **Token 优化**：Prompt Caching 全面启用（90% 折扣）、消除冗余 LLM 调用（每次查询减少 2 次）、QueryLogger 独立数据库修复 DuckDB 锁冲突
-  - **Docker GPU 直通**：Dockerfile.gpu + docker-compose gpu-service + NVIDIA GPU 直通，`docker compose --profile dev up -d` 自动启动
-- 前端新增管理面板（Tab 切换：对话 / 管理面板）
-- router-agent 新增 Docker socket 挂载 + docker SDK（用于触发 bilibili-monitor 容器）
-- Docker 部署验证通过（6 个服务全部正常运行，含 gpu-service）
+## 当前状态（2026-06-01）
+- Phase 1-10 全部完成 ✅
+- **内容域分离**：情感(`emotional`) + 求职(`career`) 双轨精炼 + 检索隔离（`refiner_domains.py`）
+- **unknown 归属修复**：yt-dlp + Cookie，1158 → 9（99.2%）
+- **分批采集**：下载→转写→精炼入库→清理，每批30个，避免磁盘浪费
+- 详细进度见 `docs/开发计划.md`
 
 ## 技术栈
-- Python 3.11 / Node.js 24 / Git 2.53
-- LLM: MiniMax M2.7 (Anthropic-compatible API at api.minimaxi.com/anthropic)
-- LLM: DeepSeek V4 Pro (OpenAI-compatible API, RAG 问答默认 + 内容精炼)
+- Python 3.11 / Node.js 24
+- LLM: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Pro (OpenAI API, 精炼+RAG)
 - Embedding: SiliconFlow API (BAAI/bge-large-zh-v1.5)
-- 精炼模型: deepseek-v4-pro (via local proxy at 10.168.165.50:3300)
+- 精炼: deepseek-v4-pro (local proxy 10.168.165.50:3300)
 - 存储: DuckDB (结构化) + ChromaDB (向量)
-- 部署: Docker Compose (NAS: Intel N150 + 8GB RAM, Local: RTX 4060 + 24GB)
+- 部署: Docker Compose (NAS: N150 8GB, Local: RTX 4060)
 
 ## 子项目
-- `bilibili-monitor/` - B站监控（已独立化，无 Hermes 依赖）
-- `personal-knowledge-rag/` - 视频知识库RAG问答 (FastAPI:8090, LangChain, BM25+向量混合检索, DeepSeek/MiniMax 双 LLM)
-- `text-to-sql/` - Text-to-SQL (FastAPI:8010 + React前端:3000, 4-Agent 手写pipeline)
-- `router-agent/` - 路由 Agent（意图分类 + 查询分发 + 结果融合, FastAPI:8000）
-- `text-to-sql/frontend/` - 统一前端（React + Nginx 反向代理, :80）
-- `relationship-analysis/` - 情感分析技能 (1413个精炼文件源, 已迁移到主系统)
+| 目录 | 说明 | 端口 |
+|------|------|------|
+| `bilibili-monitor/` | B站监控（下载+转写+精炼） | — |
+| `personal-knowledge-rag/` | RAG问答（BM25+向量混合检索） | 8090 |
+| `text-to-sql/` | Text-to-SQL（4-Agent pipeline） | 8010 |
+| `router-agent/` | 路由Agent（意图分类+分发+融合） | 8000 |
+| `text-to-sql/frontend/` | 统一前端（React + Nginx） | 80 |
 
 ## 开发规范
-- **开始任何开发前，必须先执行 `git pull --rebase` 确认代码是最新版本**（项目由多个 Claude Code 会话交替修改，远程仓库是唯一真实来源）
-- 环境差异走 .env + Docker profiles, 不改代码
-- 所有API密钥走环境变量, 不硬编码
-- Git提交用中文说明
-- 代码注释用中文
-- NAS内存限制8GB, 各服务需设mem_limit
-- **Docker 构建必须使用国内镜像加速**：
-  - apt: 阿里云 Debian 镜像 (`mirrors.aliyun.com`)
-  - pip: 清华 TUNA 镜像 (`pypi.tuna.tsinghua.edu.cn/simple/`)
-  - npm: 淘宝镜像 (`registry.npmmirror.com`)
-- **每次 Docker 镜像重建后，清理构建缓存**：`docker builder prune -a -f`（释放磁盘空间）
-- **每完成一个任务点，立即更新 `docs/开发计划.md` 中的 checkbox，同时检查并更新工作空间内其他相关 .md 文档（如 README.md、架构文档、快速上手指南等）**
-- **修改代码后，必须先重建 Docker 镜像、重启服务、验证功能正常，确认无误后再 git commit 并 push**（避免将有明显 bug 的代码推送到远程，影响其他会话或 NAS 端部署）
+- **开始任何开发前，必须先 `git pull --rebase`**（多会话交替修改，远程是唯一真实来源）
+- **修改代码后，先重建Docker镜像、重启服务、验证功能，确认无误后再 git commit 并 push**
+- 环境差异走 .env + Docker profiles，不改代码
+- API密钥走环境变量，不硬编码
+- Git提交/代码注释用中文
+- NAS内存8GB，各服务需设mem_limit
+- Docker 构建用国内镜像：apt(阿里云) pip(清华TUNA) npm(淘宝)
+- 镜像重建后清缓存：`docker builder prune -a -f`
+- 每完成任务点，更新 `docs/开发计划.md` 的 checkbox
 
 ## 关键文件
-- `docs/开发计划.md` - 任务清单和进度（剩余任务在 Phase 8.5）
-- `docs/开发者快速上手指南.md` - 隐性知识、常见问题、调试技巧
-- `README.md` - 项目概述、快速开始
-- `docs/智能内容分析系统-*.md` - 架构/工作流/部署规划
-- `relationship-analysis/scripts/refine_batch.py` - 精炼脚本 (三段式: 核心观点+案例摘要+可行动建议, 31个分类)
+- `docs/开发计划.md` - 任务清单和进度
+- `docs/开发者快速上手指南.md` - 隐性知识、调试技巧、已知坑点
+- `README.md` - 项目概述
 
 ## 注意事项
 - text-to-sql 声称用CrewAI但实际是纯Python手写pipeline
-- bilibili-monitor 已从 Hermes Skill 改造为独立服务，无 Hermes 依赖
-- 意图分类器 category 只能用 31 个有效分类名（如 `01_喜欢`），话题词（如"冷暴力"）放 keywords
+- 意图分类器 category 只能用有效分类名，话题词放 keywords
 - Docker Desktop 路径: /c/Users/25022/AppData/Local/Programs/DockerDesktop/resources/bin
 
 ## 新会话启动流程
-1. `git pull --rebase`（确保最新）
-2. 读取 `docs/开发计划.md`，找到剩余任务
-3. 读取 `docs/开发者快速上手指南.md` 了解调试技巧和已知坑点
+1. `git pull --rebase`
+2. 读取 `docs/开发计划.md` 找到剩余任务
+3. 读取 `docs/开发者快速上手指南.md` 了解坑点
 4. 开始开发
