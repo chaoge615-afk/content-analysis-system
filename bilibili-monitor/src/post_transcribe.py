@@ -107,7 +107,8 @@ def process_transcripts(
                         print(f"  {wait}s 后重试 ({refine_attempt+1}/3)")
                         time.sleep(wait)
             if not summary:
-                print(f"  ⚠️ 精炼最终失败，使用原文")
+                print(f"  ⚠️ 精炼最终失败，跳过入库（保留转写文件下次重试）")
+                continue
 
         # 写入 DuckDB
         video_record = {
