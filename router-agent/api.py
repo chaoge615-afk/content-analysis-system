@@ -79,6 +79,7 @@ class ChatResponse(BaseModel):
 class TriggerRequest(BaseModel):
     max_videos: Optional[int] = None   # 最大视频数限制
     up_names: Optional[list] = None    # 指定 UP 主列表（可选，多选）
+    full_scan: bool = False            # 全量扫描所有历史视频
 
 
 class CookieRequest(BaseModel):
@@ -625,6 +626,8 @@ async def trigger_monitor(req: TriggerRequest):
         params["max_videos"] = req.max_videos
     if req.up_names:
         params["up_names"] = req.up_names
+    if req.full_scan:
+        params["full_scan"] = True
 
     result = monitor_trigger.trigger(params)
     return result

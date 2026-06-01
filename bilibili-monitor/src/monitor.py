@@ -420,6 +420,7 @@ def main():
     parser.add_argument('--max-videos', type=int, default=0, help='最多处理视频数（0=不限制）')
     parser.add_argument('--batch-size', type=int, default=30, help='分批处理大小（下载→转写→入库→清理，默认30）')
     parser.add_argument('--asr', action='store_true', help='强制使用云 ASR 转写（覆盖配置文件设置）')
+    parser.add_argument('--full-scan', action='store_true', help='全量扫描所有历史视频（忽略增量阈值）')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -470,11 +471,11 @@ def main():
     downloaded_set = load_checkpoint(uid, '_downloaded')
     is_new_up = (len(done_bvid_set) == 0 and len(downloaded_set) == 0)
     print(f"已处理视频数: {len(done_bvid_set)} (done_bvid), {len(downloaded_set)} (已下载待转写)")
-    print(f"{'(新 UP，全量扫描)' if is_new_up else '(增量扫描)'}\n")
+    print(f"{'(新 UP，全量扫描)' if is_new_up else '(全量扫描)' if args.full_scan else '(增量扫描)'}\n")
 
     # ── 获取视频列表 ──
-    # 新UP主 或 done_bvid < 100（尚未完成全量采集）：全量扫描
-    max_count = 9999 if (is_new_up or len(done_bvid_set) < 100) else 30
+    # 新UP主 或 done_bvid < 100（尚未完成全量采集）或 --full-scan：全量扫描
+    max_count = 9999 if (args.full_scan or is_new_up or len(done_bvid_set) < 100) else 30
     if args.max_videos > 0:
         max_count = min(max_count, args.max_videos)
     print(f"正在获取视频列表{'（全量）' if max_count > 30 else '（第一页）'}...")

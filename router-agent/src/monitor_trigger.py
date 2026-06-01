@@ -323,6 +323,8 @@ class MonitorTrigger:
             cmd.extend(["--batch-size", str(params["batch_size"])])
         if params.get("asr"):
             cmd.append("--asr")
+        if params.get("full_scan"):
+            cmd.append("--full-scan")
         # 支持多选 UP主（up_names 列表）
         up_names = params.get("up_names")
         if up_names:

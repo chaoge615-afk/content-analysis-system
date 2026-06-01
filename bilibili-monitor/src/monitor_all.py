@@ -38,7 +38,7 @@ def find_all_configs():
     return sorted(configs, key=lambda p: p.stem)
 
 
-def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False, batch_size: int = 30):
+def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False, batch_size: int = 30, full_scan: bool = False):
     """运行单个配置的监控，返回 (name, success, new_count, message, output)"""
     with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -52,6 +52,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
         "--no-notify" if no_notify else "",
         "--metadata-only" if metadata_only else "",
         "--asr" if force_asr else "",
+        "--full-scan" if full_scan else "",
         f"--max-videos={max_videos}" if max_videos > 0 else "",
         f"--batch-size={batch_size}" if batch_size != 30 else "",
     ]
@@ -110,7 +111,7 @@ def run_single(config_path: Path, dry_run: bool, no_transcribe: bool, no_notify:
     return name, proc.returncode == 0, new_count, msg, output
 
 
-def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False, batch_size: int = 30):
+def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool, metadata_only: bool = False, max_videos: int = 0, force_asr: bool = False, batch_size: int = 30, full_scan: bool = False):
     """
     批量运行一组配置，同步等待全部完成。
     返回 [(name, success, new_count, msg, output), ...]
@@ -118,7 +119,7 @@ def run_batch(configs: list, dry_run: bool, no_transcribe: bool, no_notify: bool
     results = []
     for cfg in configs:
         print(f"\n处理: {cfg.name} ...", end=" ", flush=True)
-        r = run_single(cfg, dry_run, no_transcribe, no_notify, metadata_only, max_videos, force_asr, batch_size)
+        r = run_single(cfg, dry_run, no_transcribe, no_notify, metadata_only, max_videos, force_asr, batch_size, full_scan)
         results.append(r)
         print("done")
     return results
@@ -134,6 +135,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=30, help='分批处理大小（默认30）')
     parser.add_argument('--up', nargs='+', help='只运行指定UP主（支持多个，模糊匹配）')
     parser.add_argument('--asr', action='store_true', help='强制使用云 ASR 转写（覆盖配置文件设置）')
+    parser.add_argument('--full-scan', action='store_true', help='全量扫描所有历史视频（忽略增量阈值）')
     args = parser.parse_args()
 
     configs = find_all_configs()
@@ -184,7 +186,7 @@ def main():
             print(f"\n{'='*60}")
             print(f"第 {batch_idx}/{len(batched)} 批: {[c.name for c in batch]}")
             print(f"{'='*60}")
-        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify, args.metadata_only, args.max_videos, args.asr, args.batch_size)
+        batch_results = run_batch(batch, args.dry_run, args.no_transcribe, args.no_notify, args.metadata_only, args.max_videos, args.asr, args.batch_size, args.full_scan)
         all_results.extend(batch_results)
 
         # 上一批与下一批之间稍作停顿，让 GPU 显存释放

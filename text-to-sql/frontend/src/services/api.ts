@@ -23,6 +23,7 @@ export interface SystemStatus {
 export interface TriggerParams {
   max_videos?: number;
   up_names?: string[];
+  full_scan?: boolean;
 }
 
 export interface UpInfo {

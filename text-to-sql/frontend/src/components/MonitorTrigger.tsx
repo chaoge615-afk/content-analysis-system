@@ -19,6 +19,7 @@ export default function MonitorTrigger() {
   const [upListLoading, setUpListLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [triggering, setTriggering] = useState(false);
+  const [fullScan, setFullScan] = useState(false);
   const [error, setError] = useState('');
 
   // Cookie 管理
@@ -169,6 +170,7 @@ export default function MonitorTrigger() {
     const params: Record<string, any> = {};
     if (maxVideos) params.max_videos = parseInt(maxVideos, 10);
     if (selectedUps.length > 0) params.up_names = selectedUps;
+    if (fullScan) params.full_scan = true;
 
     const result = await triggerMonitor(params);
     if (!result.success) {
@@ -496,6 +498,16 @@ export default function MonitorTrigger() {
               已选 {selectedUps.length} 个 UP主
             </span>
           )}
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fullScan}
+              onChange={(e) => setFullScan(e.target.checked)}
+              disabled={isRunning}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-600">全量扫描（拉取所有历史视频）</span>
+          </label>
         </div>
       </div>
 
