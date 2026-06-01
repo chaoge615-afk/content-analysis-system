@@ -23,6 +23,7 @@ bilibili-monitor          personal-knowledge-rag        text-to-sql
 | chromadb | 8001 | ChromaDB 向量数据库 |
 | bilibili-monitor | — | 按需运行（非常驻服务） |
 | bilibili-cron | — | 定时调度（每 6 小时，仅 NAS） |
+| gpu-service | 8011 | GPU 转录服务（仅 dev profile，需 NVIDIA 显卡） |
 
 ## 快速开始
 
@@ -62,6 +63,12 @@ docker compose --profile nas up -d --build
 ```
 
 NAS 模式额外包含 `bilibili-cron` 定时调度容器（每 6 小时自动运行 bilibili-monitor）。
+
+**GPU 转录（开发机，需 NVIDIA 显卡）：**
+```bash
+docker compose --profile dev up -d --build
+```
+Dev 模式额外包含 `gpu-service` 容器（端口 8011），前端管理面板可直接触发 GPU 转录。
 
 ### 4. 访问
 
@@ -106,7 +113,7 @@ docker compose run --rm bilibili-monitor python src/migrate_refined.py
 ## 子项目说明
 
 ### bilibili-monitor/
-B站视频自动采集：拉取视频列表 → yt-dlp 下载 → faster-whisper 转写 → DeepSeek 精炼 → 写入 DuckDB + ChromaDB
+B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU > 云ASR > CPU 三级回退）→ DeepSeek 精炼 → 写入 DuckDB + ChromaDB。支持 UP主 导入导出（ZIP 打包跨环境迁移）。
 
 ### personal-knowledge-rag/
 视频知识库 RAG 问答：BM25 + 向量混合检索，支持 MiniMax / DeepSeek 双 LLM，31 个情感分类 metadata 过滤
@@ -122,7 +129,7 @@ B站视频自动采集：拉取视频列表 → yt-dlp 下载 → faster-whisper
 - **LLM**: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Pro (OpenAI API)
 - **Embedding**: SiliconFlow (BAAI/bge-large-zh-v1.5)
 - **存储**: DuckDB (结构化) + ChromaDB (向量)
-- **转写**: faster-whisper (CTranslate2)
+- **转写**: faster-whisper (CTranslate2, GPU/CPU) + 硅基流动云 ASR (SenseVoiceSmall)
 - **部署**: Docker Compose, profiles 区分环境
 
 ## Docker 镜像迁移
