@@ -52,7 +52,7 @@ python -c "from shared_config import config; config.print_status()"
 应该看到：
 - ✅ EMBEDDING: siliconflow - BAAI/bge-large-zh-v1.5
 - ✅ CHAT: minimax - MiniMax-M2.7
-- ✅ REFINE: N/A - deepseek-v4-pro
+- ✅ REFINE: N/A - deepseek-v4-flash
 
 ### 4. 确认数据源可访问
 
@@ -128,7 +128,7 @@ python migrate_history.py --source /tmp/migrate_test --delay 2.0
 
 **观察点**：
 - B站 API 是否返回元数据
-- 精炼是否成功（DeepSeek 代理 10.168.165.50:3300 需要可达）
+- 精炼是否成功（DeepSeek API `api.deepseek.com` 需要可达）
 - DuckDB 写入是否成功
 - ChromaDB 写入是否成功
 
@@ -363,12 +363,12 @@ print(f'\\nChromaDB 总文档数: {stats[\"total_documents\"]}')
 ```
 
 **原因**：
-- DeepSeek 代理 `10.168.165.50:3300` 不可达
-- 代理服务未启动
+- DeepSeek API 连接失败
+- `REFINE_API_KEY` 未配置或已过期
 
 **处理**：
-- 确认代理服务器正在运行
-- 检查网络连接：`ping 10.168.165.50`
+- 检查 `.env` 中的 `REFINE_API_KEY` 和 `REFINE_API_URL` 是否正确
+- 测试 API 连通性：`curl https://api.deepseek.com/v1/models -H "Authorization: Bearer $REFINE_API_KEY"`
 - 如果无法解决，使用 `--skip-refine` 跳过精炼：
   ```bash
   python migrate_history.py --skip-refine

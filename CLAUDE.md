@@ -14,9 +14,9 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 
 ## 技术栈
 - Python 3.11 / Node.js 24
-- LLM: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Pro (OpenAI API, 精炼+RAG)
+- LLM: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Flash (OpenAI API, 精炼+RAG)
 - Embedding: SiliconFlow API (BAAI/bge-large-zh-v1.5)
-- 精炼: deepseek-v4-pro (local proxy 10.168.165.50:3300)
+- 精炼: deepseek-v4-flash (DeepSeek 官方 API)
 - 存储: DuckDB (结构化) + ChromaDB (向量)
 - 部署: Docker Compose (NAS: N150 8GB, Local: RTX 4060)
 

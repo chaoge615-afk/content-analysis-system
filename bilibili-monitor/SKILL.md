@@ -168,9 +168,9 @@ COMPUTE_TYPE=int8            # GPU: float16, CPU: int8
 BILIBILI_COOKIE=xxx
 
 # DeepSeek 精炼
-REFINE_API_URL=http://10.168.165.50:3300/v1/chat/completions
+REFINE_API_URL=https://api.deepseek.com/v1/chat/completions
 REFINE_API_KEY=sk-xxx
-REFINE_MODEL=deepseek-v4-pro
+REFINE_MODEL=deepseek-v4-flash
 
 # ChromaDB（Docker 内部网络）
 CHROMA_HOST=chromadb

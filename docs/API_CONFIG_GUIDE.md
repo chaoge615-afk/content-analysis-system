@@ -56,19 +56,21 @@ MINIMAX_GROUP_ID=0
 - router-agent（意图分类）
 - personal-knowledge-rag（问答备选）
 
-#### 2.2 DeepSeek V4 Pro（精炼 + RAG 问答）
+#### 2.2 DeepSeek（精炼 + RAG 问答）
 
-**提供商**：DeepSeek（自定义代理端点）
+**提供商**：DeepSeek 官方 API
 
 **配置项**：
 ```bash
-REFINE_API_URL=http://10.168.165.50:3300/v1/chat/completions
+REFINE_API_URL=https://api.deepseek.com/v1/chat/completions
 REFINE_API_KEY=sk-xxx
-REFINE_MODEL=deepseek-v4-pro
+REFINE_MODEL=deepseek-v4-flash
 ```
 
+> 所有子项目统一从 `.env` 读取 `REFINE_*` 变量，**代码中无硬编码默认值**。切换 API 只需改 `.env`，无需改代码。
+
 **使用项目**：
-- bilibili-monitor（refiner.py 内容精炼）
+- bilibili-monitor（refiner_domains.py 内容精炼）
 - personal-knowledge-rag（RAG 问答默认 LLM）
 - relationship-analysis/scripts/refine_batch.py（批量精炼）
 
@@ -140,7 +142,7 @@ print(status)
 # {
 #     "embedding": {"configured": True, "provider": "siliconflow", "model": "BAAI/bge-large-zh-v1.5"},
 #     "chat": {"configured": True, "provider": "minimax", "model": "MiniMax-M2.7"},
-#     "refine": {"configured": True, "model": "deepseek-v4-pro"}
+#     "refine": {"configured": True, "model": "deepseek-v4-flash"}
 # }
 ```
 
@@ -191,9 +193,10 @@ MODEL_NAME = config.chat.model
   - M2.7 模型，Anthropic 兼容接口
   - 适合复杂推理和代码生成
 
-- **DeepSeek**：通过自定义代理访问
-  - V4 Pro 模型，精炼效果好，也是 RAG 问答默认 LLM
-  - 端点：http://10.168.165.50:3300
+- **DeepSeek**：https://platform.deepseek.com
+  - 推荐模型：`deepseek-v4-flash`（精炼，快且便宜）、`deepseek-v4-pro`（复杂推理）
+  - OpenAI 兼容接口，也是 RAG 问答默认 LLM
+  - 注意：`deepseek-chat` / `deepseek-reasoner` 将于 2026/07/24 弃用
 
 ## 常见问题
 
@@ -237,11 +240,12 @@ python shared/shared_config.py
 === API Config Status ===
 [OK] EMBEDDING: siliconflow - BAAI/bge-large-zh-v1.5
 [OK] CHAT: minimax - MiniMax-M2.7
-[OK] REFINE: N/A - deepseek-v4-pro
+[OK] REFINE: N/A - deepseek-v4-flash
 ```
 
 ## 更新日志
 
+- **2026-06-03**：REFINE 配置集中化，去掉所有 `.py` 文件中的硬编码默认值，统一从 `.env` 读取；DeepSeek 切换为官方 API（`api.deepseek.com`），默认模型改为 `deepseek-v4-flash`
 - **2026-05-25**：修正 DeepSeek 端点（10.168.165.50:3300），添加 RAG 作为 DeepSeek 用户，MinimaxEmbeddings → SiliconFlowEmbeddings，MiniMax 用户新增 router-agent
 - **2026-05-24**：初始版本，统一 Embedding 和 Chat 配置
 - 支持项目：bilibili-monitor, personal-knowledge-rag, text-to-sql, router-agent, relationship-analysis

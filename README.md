@@ -126,7 +126,7 @@ B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU >
 
 ## 技术栈
 
-- **LLM**: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Pro (OpenAI API)
+- **LLM**: MiniMax M2.7 (Anthropic API) + DeepSeek V4 Flash (OpenAI API)
 - **Embedding**: SiliconFlow (BAAI/bge-large-zh-v1.5)
 - **存储**: DuckDB (结构化) + ChromaDB (向量)
 - **转写**: faster-whisper (CTranslate2, GPU/CPU) + 硅基流动云 ASR (SenseVoiceSmall)
