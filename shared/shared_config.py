@@ -44,9 +44,9 @@ class ChatConfig:
         self.group_id = os.getenv("MINIMAX_GROUP_ID", "")
 
         # DeepSeek（精炼专用）
-        self.refine_url = os.getenv("REFINE_API_URL", "http://10.168.165.50:3300/v1/chat/completions")
+        self.refine_url = os.getenv("REFINE_API_URL", "")
         self.refine_key = os.getenv("REFINE_API_KEY", "")
-        self.refine_model = os.getenv("REFINE_MODEL", "deepseek-v4-pro")
+        self.refine_model = os.getenv("REFINE_MODEL", "")
 
     def is_configured(self) -> bool:
         """检查主 Chat API 是否已配置"""

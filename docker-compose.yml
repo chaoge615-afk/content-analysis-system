@@ -24,7 +24,7 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - chromadb-data:/chroma/chroma
+      - chromadb-data:/data
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
@@ -80,6 +80,7 @@ services:
       - LLM_MODEL=${RAG_LLM_MODEL:-deepseek-v4-pro}
       - REFINE_API_KEY=${REFINE_API_KEY}
       - REFINE_API_URL=${REFINE_API_URL}
+      - REFINE_MODEL=${REFINE_MODEL:-deepseek-v4-flash}
       - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
       - SILICONFLOW_BASE_URL=${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
@@ -133,6 +134,7 @@ services:
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
       - REFINE_API_URL=${REFINE_API_URL}
       - REFINE_API_KEY=${REFINE_API_KEY}
+      - REFINE_MODEL=${REFINE_MODEL:-deepseek-v4-flash}
       - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
@@ -227,6 +229,7 @@ services:
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
       - REFINE_API_URL=${REFINE_API_URL}
       - REFINE_API_KEY=${REFINE_API_KEY}
+      - REFINE_MODEL=${REFINE_MODEL:-deepseek-v4-flash}
       - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}

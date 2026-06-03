@@ -97,7 +97,7 @@ class KnowledgeRAG:
         self.llm_provider = os.getenv("LLM_PROVIDER", "minimax")
         if self.llm_provider == "deepseek":
             self.deepseek_api_key = os.getenv("REFINE_API_KEY", "")
-            self.deepseek_base_url = os.getenv("REFINE_API_URL", "http://10.168.165.50:3300/v1")
+            self.deepseek_base_url = os.getenv("REFINE_API_URL", "")
             # REFINE_API_URL 指向 /v1/chat/completions，OpenAI SDK 需要 /v1
             if self.deepseek_base_url.endswith("/chat/completions"):
                 self.deepseek_base_url = self.deepseek_base_url.rsplit("/chat/completions", 1)[0]

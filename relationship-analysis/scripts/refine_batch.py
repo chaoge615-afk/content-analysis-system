@@ -3,12 +3,12 @@
 
 import urllib.request, json, os, re, sys, time, shutil
 
-API_URL = os.environ.get('REFINE_API_URL', 'http://140.143.147.125:3300/v1/chat/completions')
+API_URL = os.environ.get('REFINE_API_URL', '')
 API_KEY = os.environ.get('REFINE_API_KEY', os.environ.get('RESOFT_API_KEY', os.environ.get('MINIMAX_API_KEY', '')))
 if not API_KEY:
     print("错误: 未设置 REFINE_API_KEY / RESOFT_API_KEY / MINIMAX_API_KEY 环境变量")
     sys.exit(1)
-REFINE_MODEL = os.environ.get('REFINE_MODEL', 'deepseek-v4-pro')
+REFINE_MODEL = os.environ.get('REFINE_MODEL', '')
 BATCH_SIZE = 50
 REFINE_SLEEP = 5
 CLASSIFY_SLEEP = 3
