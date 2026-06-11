@@ -1,5 +1,10 @@
 # 智能内容分析系统
 
+![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Node](https://img.shields.io/badge/Node.js-24-green?logo=node.js)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
 B站情感博主视频 → 自动下载转写 → LLM 精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
 ## 架构
@@ -160,6 +165,16 @@ docker compose --profile dev up -d
 └── scripts/                    # 全局脚本
     └── cron_monitor.sh         # 宿主机 cron 入口（备选方案）
 ```
+
+## 已知限制
+
+| 限制项 | 说明 |
+|--------|------|
+| 多用户 | 单用户模式，无登录/权限隔离 |
+| 视频播放 | 仅存储音频转写文本，不支持在线播放原视频 |
+| 流式响应 | LLM 回答为一次性返回，无 SSE/WebSocket 流式输出 |
+| 高并发 | 单实例部署，未做负载均衡，不适合多人同时使用 |
+| Cookie 续期 | B站 Cookie 有效期约 30 天，过期需手动更新 |
 
 ## 开发规范
 

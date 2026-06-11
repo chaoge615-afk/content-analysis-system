@@ -40,7 +40,9 @@ EMBEDDING_MODEL=BAAI/bge-large-zh-v1.5
 
 #### 2.1 MiniMax M2.7（主 Chat API）
 
-**提供商**：MiniMax（Anthropic 兼容接口）
+**提供商**：MiniMax（同时兼容 Anthropic SDK 和 OpenAI SDK）
+
+> 本项目使用 Anthropic 兼容接口（`/anthropic`），但 MiniMax 也提供 OpenAI 兼容端点（`https://api.minimaxi.com/v1`），可按需切换。
 
 **配置项**：
 ```bash
@@ -190,8 +192,8 @@ MODEL_NAME = config.chat.model
   - 推荐模型：BAAI/bge-large-zh-v1.5（中文优化）
 
 - **MiniMax**：https://www.minimaxi.com/
-  - M2.7 模型，Anthropic 兼容接口
-  - 适合复杂推理和代码生成
+  - M2.7 模型，同时兼容 Anthropic SDK 和 OpenAI SDK
+  - 本项目使用 Anthropic 兼容接口，适合复杂推理和代码生成
 
 - **DeepSeek**：https://platform.deepseek.com
   - 推荐模型：`deepseek-v4-flash`（精炼，快且便宜）、`deepseek-v4-pro`（复杂推理）
