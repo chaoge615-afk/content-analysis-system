@@ -124,6 +124,7 @@ services:
       - RAG_SERVICE_URL=http://rag:8090
       - DUCKDB_PATH=/app/data/content.db
       - DATA_DIR=/app/data  # QueryLogger 独立数据库路径
+      - REQUEST_TIMEOUT=120  # LLM 调用超时（首次请求可能较慢）
       - BILIBILI_CONFIG_DIR=/app/bilibili-config  # UP主配置目录
       - BILIBILI_DATA_DIR=/app/bilibili-data  # ASR 设置/用量存储
       # 透传 bilibili-monitor 所需环境变量（用于触发采集）

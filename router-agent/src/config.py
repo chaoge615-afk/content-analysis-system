@@ -27,6 +27,6 @@ RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://localhost:8090")
 # ============ 服务配置 ============
 PORT = int(os.getenv("ROUTER_PORT", "8000"))
 HOST = os.getenv("ROUTER_HOST", "0.0.0.0")
-REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))
 # DuckDB 数据路径（与 text-to-sql / bilibili-monitor 共享 volume）
 DUCKDB_PATH = os.getenv("DATABASE_PATH", "/app/data/content.db")

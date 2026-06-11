@@ -133,15 +133,15 @@ interface Message {
 ```tsx
 // 路由标签颜色
 const routeColors = {
-  structured: 'bg-blue-100 text-blue-800',   // 蓝色
-  semantic: 'bg-green-100 text-green-800',   // 绿色
-  hybrid: 'bg-purple-100 text-purple-800',   // 紫色
+  structured: 'bg-purple-100 text-purple-800',   // 紫色
+  semantic: 'bg-green-100 text-green-800',       // 绿色
+  hybrid: 'bg-orange-100 text-orange-800',       // 橙色
 };
 
 const routeLabels = {
-  structured: '结构化',
-  semantic: '语义',
-  hybrid: '混合',
+  structured: '结构化查询',
+  semantic: '语义检索',
+  hybrid: '混合查询',
 };
 ```
 
@@ -180,7 +180,7 @@ const routeLabels = {
 )}
 ```
 
-[截图：对话界面展示一个混合查询——紫色 hybrid 标签 + 自然语言回答 + 可折叠 SQL + 来源引用]
+[截图：对话界面展示一个混合查询——橙色 hybrid 标签 + 自然语言回答 + 可折叠 SQL + 来源引用]
 
 
 ## 三、斜杠命令
