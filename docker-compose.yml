@@ -163,6 +163,28 @@ services:
 
   # ============ 前端服务 ============
 
+  # MCP Server 包装层（供 agent-platform 通过 MCP SSE 协议调用）
+  mcp-servers:
+    build:
+      context: ./mcp-servers
+      dockerfile: Dockerfile
+    container_name: mcp-servers
+    profiles: [dev, nas]
+    ports:
+      - "9001:9001"
+      - "9002:9002"
+      - "9003:9003"
+    environment:
+      - SQL_SERVICE_URL=http://text-to-sql:8010
+      - RAG_SERVICE_URL=http://rag:8090
+    depends_on:
+      text-to-sql:
+        condition: service_healthy
+      rag:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+
   # 前端（Nginx 反向代理）
   frontend:
     build:
