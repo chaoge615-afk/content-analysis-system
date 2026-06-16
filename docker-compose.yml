@@ -51,6 +51,7 @@ services:
     environment:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimaxi.com/anthropic}
+      - MODEL_NAME=${LLM_MODEL:-MiniMax-M2.7}
       - DATABASE_PATH=/app/data/content.db
     volumes:
       - duckdb-data:/app/data
@@ -118,7 +119,7 @@ services:
       - "8000:8000"
     environment:
       - CHAT_API_KEY=${MINIMAX_API_KEY}
-      - CHAT_API_URL=https://api.minimaxi.com/anthropic
+      - CHAT_API_URL=${CHAT_BASE_URL:-https://api.minimaxi.com/anthropic}
       - CHAT_MODEL=${LLM_MODEL:-MiniMax-M2.7}
       - SQL_SERVICE_URL=http://text-to-sql:8010
       - RAG_SERVICE_URL=http://rag:8090

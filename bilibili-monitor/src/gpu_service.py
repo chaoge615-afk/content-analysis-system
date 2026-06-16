@@ -205,7 +205,10 @@ class TranscribeTask:
             # 加载模型
             compute_type = "float16" if device == "cuda" else "int8"
             self._append_log(f"加载 Whisper 模型: {model_size} ({device}, {compute_type})")
+            self._append_log("(首次运行需下载模型，请耐心等待...)")
+            self._update_progress(current=f"加载模型 {model_size}...")
             model = WhisperModel(model_size, device=device, compute_type=compute_type)
+            self._append_log("模型加载完成")
 
             success = 0
             failed = 0

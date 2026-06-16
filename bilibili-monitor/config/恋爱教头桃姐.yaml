@@ -1,16 +1,9 @@
-# B站UP主监控配置
-name: "恋爱教头桃姐"
-uid: "3546912280021515"
-domain: "emotional"
-cookie_file: "~/.bilibili/cookie.txt"
-download_root: "~/B站监控"
-
-# QQ 通知（填 openid）
-notify_target: "qq:65091C38C651B44BA071725FDF78A800"
-
-# Whisper 转写设置
-whisper_model: "medium"
-whisper_device: "cuda"
-
-# 转写输出目录
-transcribe_output_dir: "/mnt/e/情感素材库"
+cookie_file: ~/.bilibili/cookie.txt
+download_root: ~/B站监控
+whisper_model: small
+whisper_device: cpu
+transcribe_output_dir: ''
+notify_target: ''
+domain: emotional
+name: 恋爱教头桃姐
+uid: '3546912280021515'

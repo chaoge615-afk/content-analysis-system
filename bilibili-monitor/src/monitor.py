@@ -84,22 +84,22 @@ def trigger_transcribe(m4a_dir: str, config: dict, uid: str, up_name: str = "", 
     up_name: UP 主名称（用于按 UP 主分类转写输出）
     force_asr: 强制使用云 ASR（覆盖配置文件设置）
 
-    转写优先级：云 ASR > GPU 远程转写 > 本地 Whisper CPU
+    转写优先级：GPU 远程转写 > 云 ASR > 本地 Whisper CPU
 
     返回: (success_count, failed_count, transcripts_dir)
     """
-    # 检查是否使用云 ASR
-    asr_config = _load_asr_config()
-    use_asr = force_asr or asr_config.get("enabled", False)
-
-    if use_asr:
-        return _trigger_transcribe_asr(m4a_dir, config, uid, up_name)
-
-    # 检查是否有 GPU 远程转写服务可用
+    # 优先使用本地 GPU 远程转写服务（RTX 4060，速度快且免费）
     gpu_url = os.getenv("GPU_SERVICE_URL", "")
     if gpu_url:
         return _trigger_transcribe_gpu_remote(m4a_dir, config, uid, up_name, gpu_url)
 
+    # 其次使用云 ASR（需付费）
+    asr_config = _load_asr_config()
+    use_asr = force_asr or asr_config.get("enabled", False)
+    if use_asr:
+        return _trigger_transcribe_asr(m4a_dir, config, uid, up_name)
+
+    # 最后回退到本地 Whisper CPU
     return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
 
 
@@ -215,6 +215,7 @@ def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name
 
         # 2. 轮询等待完成
         print(f"  ⏳ GPU 转写任务已提交，等待完成...")
+        last_log_idx = 0  # 追踪已打印的日志位置
         while True:
             time.sleep(5)
             try:
@@ -229,7 +230,13 @@ def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name
                 failed = progress.get("failed", 0)
                 current = progress.get("current", "")
 
-                if found > 0:
+                # 显示 GPU 服务日志（模型下载/加载阶段尤为重要）
+                logs = task.get("logs", [])
+                for new_log in logs[last_log_idx:]:
+                    print(f"    [GPU] {new_log}")
+                last_log_idx = len(logs)
+
+                if found > 0 and (success + failed) > 0:
                     print(f"    进度: {success + failed}/{found} (当前: {current[:30]})")
 
                 if task_status in ("done", "error", "idle"):

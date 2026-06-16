@@ -223,20 +223,24 @@ async def get_up_list():
     try:
         conn = _get_db()
         try:
+            # 检查表是否存在（全新部署时 DuckDB 可能为空）
+            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+
             # 从 up_info 读取已有的统计数据
             db_ups = {}
-            rows = conn.execute(
-                "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
-            ).fetchall()
-            for r in rows:
-                db_ups[str(r[0])] = {
-                    "uid": str(r[0]), "name": r[1],
-                    "total_videos": r[2],
-                    "last_update": str(r[3]) if r[3] else None,
-                }
+            if "up_info" in tables:
+                rows = conn.execute(
+                    "SELECT uid, name, total_videos, last_update FROM up_info ORDER BY total_videos DESC"
+                ).fetchall()
+                for r in rows:
+                    db_ups[str(r[0])] = {
+                        "uid": str(r[0]), "name": r[1],
+                        "total_videos": r[2],
+                        "last_update": str(r[3]) if r[3] else None,
+                    }
 
             # 补充 video_meta 中有但 up_info 中没有的 UP主
-            if not db_ups:
+            if not db_ups and "video_meta" in tables:
                 vrows = conn.execute(
                     """SELECT up_uid, up_name, COUNT(*) as cnt
                        FROM video_meta
@@ -296,14 +300,16 @@ async def list_ups():
     try:
         conn = _get_db()
         try:
-            for up in ups:
-                uid = up["uid"]
-                if uid:
-                    count = conn.execute(
-                        "SELECT COUNT(*) FROM video_meta WHERE up_uid = ?", [uid]
-                    ).fetchone()[0]
-                    up["video_count"] = count
-                    up["has_video"] = count > 0
+            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+            if "video_meta" in tables:
+                for up in ups:
+                    uid = up["uid"]
+                    if uid:
+                        count = conn.execute(
+                            "SELECT COUNT(*) FROM video_meta WHERE up_uid = ?", [uid]
+                        ).fetchone()[0]
+                        up["video_count"] = count
+                        up["has_video"] = count > 0
         finally:
             conn.close()
     except Exception:
@@ -414,6 +420,9 @@ async def get_recent():
     try:
         conn = _get_db()
         try:
+            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+            if "video_meta" not in tables:
+                return {"success": True, "data": []}
             rows = conn.execute(
                 """SELECT bvid, up_name, title, publish_date, category, duration
                    FROM video_meta
@@ -436,6 +445,9 @@ async def get_categories():
     try:
         conn = _get_db()
         try:
+            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+            if "video_meta" not in tables:
+                return {"success": True, "data": []}
             rows = conn.execute(
                 """SELECT category, COUNT(*) as cnt
                    FROM video_meta
@@ -689,13 +701,15 @@ async def get_system_metrics():
                         "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
                     ).fetchall()
                     tables = []
+                    video_meta_cnt = 0
                     for (tname,) in table_names:
                         try:
                             cnt = conn.execute(f'SELECT COUNT(*) FROM "{tname}"').fetchone()[0]
                             tables.append({"table": tname, "count": cnt})
+                            if tname == "video_meta":
+                                video_meta_cnt = cnt
                         except Exception:
                             tables.append({"table": tname, "count": -1})
-                    video_meta_cnt = conn.execute("SELECT COUNT(*) FROM video_meta").fetchone()[0]
                     return {"tables": tables, "total_videos": video_meta_cnt}
                 finally:
                     conn.close()

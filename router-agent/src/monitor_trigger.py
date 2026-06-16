@@ -164,20 +164,21 @@ class MonitorTrigger:
             command = self._build_command(params)
 
             try:
-                # 构建 volume 映射
-                # 注意：Docker SDK 需要 host 路径，不能用 named volumes
-                # 但 named volumes 在 Docker daemon 层面是可以的
+                # 构建 volume 映射（卷名前缀需与 docker-compose 项目名一致）
+                vol_prefix = self._get_volume_prefix()
                 volumes = [
-                    "ai_bilibili-data:/app/downloads:rw",
-                    "ai_bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
-                    "ai_duckdb-data:/app/data:rw",
+                    f"{vol_prefix}bilibili-data:/app/downloads:rw",
+                    f"{vol_prefix}bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
+                    f"{vol_prefix}duckdb-data:/app/data:rw",
                 ]
 
                 # 挂载本地目录（需要知道 host 路径）
-                project_dir = os.getenv("PROJECT_DIR", "").replace("\\", "/")
+                project_dir = self._detect_project_dir(client)
                 if project_dir:
                     volumes.append(f"{project_dir}/bilibili-monitor/transcripts:/app/transcripts:rw")
                     volumes.append(f"{project_dir}/bilibili-monitor/chromadb:/app/chromadb:rw")
+                    # 挂载 UP主 配置目录（实时读取，避免使用镜像内烘焙的旧配置）
+                    volumes.append(f"{project_dir}/bilibili-monitor/config:/app/bilibili-config:rw")
 
                 container = client.containers.run(
                     image=image,
@@ -273,7 +274,7 @@ class MonitorTrigger:
         env_keys = [
             "QQ_BOT_URL", "QQ_USER_ID",
             "SILICONFLOW_API_KEY", "EMBEDDING_API_KEY",
-            "REFINE_API_URL", "REFINE_API_KEY",
+            "REFINE_API_URL", "REFINE_API_KEY", "REFINE_MODEL",
             "WHISPER_DEVICE", "WHISPER_MODEL", "COMPUTE_TYPE",
             "GPU_SERVICE_URL",  # 开发机 GPU 转写服务地址
         ]
@@ -311,6 +312,7 @@ class MonitorTrigger:
         env["DATABASE_PATH"] = "/app/data/content.db"
         env["CHROMA_HOST"] = "chromadb"
         env["CHROMA_PORT"] = "8000"
+        env["BILIBILI_CONFIG_DIR"] = "/app/bilibili-config"
 
         return env
 
@@ -348,6 +350,77 @@ class MonitorTrigger:
             except Exception:
                 continue
         return "bridge"
+
+    def _get_volume_prefix(self) -> str:
+        """
+        获取 Docker Compose 命名卷的前缀
+
+        Docker Compose 创建的卷命名为 {project_name}_{volume_name}
+        例如：content-analysis-system_duckdb-data
+        """
+        project_name = os.getenv("COMPOSE_PROJECT_NAME", "")
+        if project_name:
+            return f"{project_name}_"
+
+        # 从 router-agent 容器自身的挂载信息推断卷前缀
+        try:
+            hostname = os.getenv("HOSTNAME", "")
+            if hostname:
+                client = self._get_client()
+                container = client.containers.get(hostname)
+                mounts = container.attrs.get("Mounts", [])
+                for mount in mounts:
+                    if mount.get("Destination") == "/app/data" and mount.get("Type") == "volume":
+                        vol_name = mount.get("Name", "")
+                        # 卷名格式: {prefix}_duckdb-data → 提取 prefix_
+                        if vol_name.endswith("_duckdb-data"):
+                            return vol_name[:-len("duckdb-data")]
+        except Exception:
+            pass
+
+        # 回退：尝试查找已有的 duckdb-data 卷
+        try:
+            client = self._get_client()
+            for vol in client.volumes.list():
+                name = vol.name
+                if name.endswith("duckdb-data") or name.endswith("_duckdb-data"):
+                    return name[:-len("duckdb-data")]
+        except Exception:
+            pass
+
+        return ""  # 无前缀（使用裸卷名）
+
+    def _detect_project_dir(self, client) -> str:
+        """
+        自动检测项目根目录的宿主机路径
+
+        优先使用 PROJECT_DIR 环境变量，否则从 router-agent 容器自身的挂载信息推断
+        """
+        # 1. 优先使用环境变量
+        project_dir = os.getenv("PROJECT_DIR", "").replace("\\", "/")
+        if project_dir:
+            return project_dir
+
+        # 2. 从 router-agent 容器自身的挂载推断宿主机路径
+        #    router-agent 的 /app/bilibili-config 挂载自宿主机的 bilibili-monitor/config
+        try:
+            hostname = os.getenv("HOSTNAME", "")
+            if hostname:
+                container = client.containers.get(hostname)
+                mounts = container.attrs.get("Mounts", [])
+                for mount in mounts:
+                    if mount.get("Destination") == "/app/bilibili-config":
+                        host_path = mount.get("Source", "")
+                        if host_path:
+                            # Source 是宿主机上的绝对路径，去掉 /bilibili-monitor/config 后缀
+                            host_path = host_path.replace("\\", "/")
+                            suffix = "/bilibili-monitor/config"
+                            if host_path.endswith(suffix):
+                                return host_path[:-len(suffix)]
+        except Exception:
+            pass
+
+        return ""
 
     def _monitor_container(self, container_id: str):
         """后台线程：监控容器状态直到完成"""
