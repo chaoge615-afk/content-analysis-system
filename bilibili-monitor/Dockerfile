@@ -7,8 +7,8 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debia
     sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null; \
     true
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --fix-missing \
+# 安装系统依赖（--no-install-recommends 跳过数百MB可选依赖）
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
