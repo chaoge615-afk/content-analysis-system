@@ -11,7 +11,7 @@ import {
   UpImportResult,
 } from '../services/api';
 
-export default function UpManager() {
+export default function UpManager({ onChanged }: { onChanged?: () => void } = {}) {
   const [ups, setUps] = useState<UpInfoDetailed[]>([]);
   const [loading, setLoading] = useState(true);
   const [addUrl, setAddUrl] = useState('');
@@ -70,6 +70,7 @@ export default function UpManager() {
       setAddUrl('');
       setResolved(null);
       fetchUps();
+      onChanged?.();
       setTimeout(() => setSuccess(''), 3000);
     } else {
       setError(result.error || '添加失败');
@@ -86,6 +87,7 @@ export default function UpManager() {
     if (result.success) {
       setSuccess(`✅ 已删除 UP主: ${name}`);
       fetchUps();
+      onChanged?.();
       setTimeout(() => setSuccess(''), 3000);
     } else {
       setError(result.error || '删除失败');
@@ -129,6 +131,7 @@ export default function UpManager() {
       if (result.success) {
         setSuccess(`✅ 已导入 UP主: ${result.imported?.name} (${result.imported?.videos_written} 个视频)`);
         fetchUps();
+        onChanged?.();
         setTimeout(() => setSuccess(''), 5000);
       } else {
         setError(result.error || '导入失败');

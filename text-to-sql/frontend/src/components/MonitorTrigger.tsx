@@ -40,14 +40,21 @@ export default function MonitorTrigger() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 加载 UP主 列表
-  useEffect(() => {
+  // 加载 UP主 列表（可被 UpManager 触发刷新）
+  const fetchUpList = () => {
     setUpListLoading(true);
     getUpList()
-      .then(setUpList)
+      .then((list) => {
+        setUpList(list);
+        // 清理已不存在的选中项
+        const validNames = new Set(list.map((u) => u.name));
+        setSelectedUps((prev) => prev.filter((n) => validNames.has(n)));
+      })
       .catch(() => setUpList([]))
       .finally(() => setUpListLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchUpList(); }, []);
 
   useEffect(() => {
     fetchStatus();
@@ -568,7 +575,7 @@ export default function MonitorTrigger() {
 
       {/* UP主管理 */}
       <div className="mt-6 pt-6 border-t border-gray-200">
-        <UpManager />
+        <UpManager onChanged={fetchUpList} />
       </div>
     </div>
   );
