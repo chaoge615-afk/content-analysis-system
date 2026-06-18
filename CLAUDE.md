@@ -32,6 +32,7 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 ## 开发规范
 - **开始任何开发前，必须先 `git pull --rebase`**（多会话交替修改，远程是唯一真实来源）
 - **启动项目前，确认是否需要重新构建**：对比本地代码与运行中镜像的构建时间，如果代码有更新（git pull 有新提交），先 `docker compose --profile dev up -d --build` 重建镜像再启动
+- **gpu-service 走独立 profile**：`--profile dev` 不含 gpu-service。有 NVIDIA GPU 的机器用 `./scripts/deploy.sh dev`（脚本会实测 `--gpus all`，自动追加 `--profile gpu`）；或手动 `docker compose --profile dev --profile gpu up -d --build`。无 GPU 机器直接 `--profile dev` 即可，不会构建/启动 gpu-service
 - **修改代码后，先重建Docker镜像、重启服务、验证功能，确认无误后再 git commit 并 push**
 - 环境差异走 .env + Docker profiles，不改代码
 - API密钥走环境变量，不硬编码

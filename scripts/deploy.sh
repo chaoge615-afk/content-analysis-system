@@ -48,13 +48,29 @@ fi
 echo "环境变量检查通过"
 echo ""
 
+# GPU 实测：仅 dev profile 下才检测，决定是否追加 gpu profile（gpu-service）
+# 用 --gpus all 启动最小容器，容器 init 阶段即校验 NVIDIA 直通
+#   有 GPU 直通（4060 开发机）→ init 成功，返回 0
+#   无 GPU / 无 toolkit / WSL 无适配器（办公机）→ init 失败，返回非 0
+PROFILES="$PROFILE"
+if [ "$PROFILE" = "dev" ]; then
+    echo "检测 NVIDIA GPU..."
+    if docker run --rm --gpus all alpine:latest echo gpu-ok >/dev/null 2>&1; then
+        PROFILES="$PROFILE gpu"
+        echo "✓ 检测到 NVIDIA GPU，包含 gpu-service"
+    else
+        echo "✗ 未检测到可用 GPU，跳过 gpu-service（转写将回退到云ASR/CPU）"
+    fi
+    echo ""
+fi
+
 # 构建并启动服务
 echo "构建 Docker 镜像..."
-docker compose --profile "$PROFILE" build
+docker compose --profile $PROFILES build
 
 echo ""
 echo "启动服务..."
-docker compose --profile "$PROFILE" up -d
+docker compose --profile $PROFILES up -d
 
 echo ""
 echo "等待服务启动..."
@@ -63,7 +79,7 @@ sleep 10
 # 检查服务状态
 echo ""
 echo "服务状态："
-docker compose --profile "$PROFILE" ps
+docker compose --profile $PROFILES ps
 
 echo ""
 echo "========================================"
@@ -71,20 +87,20 @@ echo "部署完成！"
 echo ""
 echo "访问地址："
 if [ "$PROFILE" = "dev" ]; then
-    echo "  前端:      http://localhost:3000"
+    echo "  前端:      http://localhost:80"
     echo "  Router:    http://localhost:8000"
     echo "  SQL API:   http://localhost:8010"
     echo "  RAG API:   http://localhost:8090"
 else
-    echo "  前端:      http://<NAS-IP>:3000"
+    echo "  前端:      http://<NAS-IP>:80"
     echo "  Router:    http://<NAS-IP>:8000"
     echo "  SQL API:   http://<NAS-IP>:8010"
     echo "  RAG API:   http://<NAS-IP>:8090"
 fi
 echo ""
 echo "运行 bilibili-monitor（按需）："
-echo "  docker compose --profile $PROFILE run --rm bilibili-monitor"
+echo "  docker compose --profile $PROFILES run --rm bilibili-monitor"
 echo ""
 echo "查看日志："
-echo "  docker compose --profile $PROFILE logs -f"
+echo "  docker compose --profile $PROFILES logs -f"
 echo "========================================"

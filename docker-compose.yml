@@ -204,13 +204,14 @@ services:
     mem_limit: 256m
 
   # GPU 转录服务（开发机专用，CUDA 直通）
-  # 仅 dev profile 启用，NAS 无 GPU 不需要
+  # 独立 gpu profile：仅在有 NVIDIA GPU 的机器启用（scripts/deploy.sh 自动实测后追加 --profile gpu）
+  # 用裸 `docker compose --profile dev` 时不会构建/启动本服务，无 GPU 机器安全
   gpu-service:
     build:
       context: ./bilibili-monitor
       dockerfile: Dockerfile.gpu
     container_name: gpu-service
-    profiles: [dev]
+    profiles: [gpu]
     ports:
       - "8011:8011"
     volumes:

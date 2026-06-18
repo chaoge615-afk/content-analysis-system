@@ -180,7 +180,7 @@ export default function GpuTranscribe() {
             请确认 docker compose 已启动 gpu-service 容器。
           </p>
           <code className="text-xs bg-gray-100 px-3 py-1.5 rounded">
-            docker compose --profile dev up -d gpu-service
+            docker compose --profile dev --profile gpu up -d gpu-service
           </code>
           <button
             onClick={fetchStatus}
