@@ -54,6 +54,7 @@ chromadb-data/
 bilibili-monitor/src/data/
 bilibili-monitor/data/
 bilibili-monitor/transcripts/
+bilibili-monitor/config/
 
 # bilibili-monitor credentials (NEVER commit cookies)
 bilibili-monitor/cookies/

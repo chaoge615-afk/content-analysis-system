@@ -1,9 +1,0 @@
-cookie_file: ~/.bilibili/cookie.txt
-download_root: ~/B站监控
-whisper_model: small
-whisper_device: cpu
-transcribe_output_dir: ''
-notify_target: ''
-domain: emotional
-name: 恋爱教头桃姐
-uid: '3546912280021515'
