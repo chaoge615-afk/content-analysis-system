@@ -261,8 +261,10 @@ services:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - BILIBILI_CONFIG_DIR=/app/bilibili-config
+      - BILIBILI_DATA_DIR=/app/bilibili-data  # ASR 用量存储（与 router-agent 共享）
     volumes:
       - bilibili-data:/app/downloads
+      - bilibili-data:/app/bilibili-data
       - ./bilibili-monitor/transcripts:/app/transcripts
       - ./bilibili-monitor/chromadb:/app/chromadb
       - duckdb-data:/app/data

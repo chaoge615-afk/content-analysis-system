@@ -139,8 +139,8 @@ def _trigger_transcribe_asr(m4a_dir: str, config: dict, uid: str, up_name: str =
             min_duration=60,
         )
     except Exception as e:
-        print(f"  ⚠️ 云 ASR 转写异常: {e}")
-        return 0, 0, transcripts_dir
+        print(f"  ⚠️ 云 ASR 转写异常: {e}，回退到本地 Whisper")
+        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
 
     # ── 处理转写结果 ──
     if result.found == 0:
@@ -269,15 +269,24 @@ def _trigger_transcribe_gpu_remote(m4a_dir: str, config: dict, uid: str, up_name
             print(f"  ✅ GPU 远程转写完成: {success_count} 个文件成功, {failed} 个失败")
             return success_count, failed, transcripts_dir
         else:
-            print(f"  ⚠️ GPU 转写任务异常: {task.get('status')}")
-            return 0, 0, transcripts_dir
+            print(f"  ⚠️ GPU 转写任务异常: {task.get('status')}，尝试下一级回退")
+            return _fallback_after_gpu(m4a_dir, config, uid, up_name)
 
     except requests.exceptions.ConnectionError:
-        print(f"  ⚠️ GPU 服务不可达 ({gpu_url})，回退到本地 Whisper")
-        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+        print(f"  ⚠️ GPU 服务不可达 ({gpu_url})，尝试下一级回退")
+        return _fallback_after_gpu(m4a_dir, config, uid, up_name)
     except Exception as e:
-        print(f"  ⚠️ GPU 远程转写异常: {e}，回退到本地 Whisper")
-        return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
+        print(f"  ⚠️ GPU 远程转写异常: {e}，尝试下一级回退")
+        return _fallback_after_gpu(m4a_dir, config, uid, up_name)
+
+
+def _fallback_after_gpu(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
+    """GPU 失败后的回退：先尝试云 ASR，再回退到本地 Whisper"""
+    asr_config = _load_asr_config()
+    if asr_config.get("enabled", False):
+        print("  → 尝试云 ASR 转写")
+        return _trigger_transcribe_asr(m4a_dir, config, uid, up_name)
+    return _trigger_transcribe_local(m4a_dir, config, uid, up_name)
 
 
 def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str = ""):
@@ -369,20 +378,28 @@ def _trigger_transcribe_local(m4a_dir: str, config: dict, uid: str, up_name: str
 
 
 def _load_asr_config() -> dict:
-    """加载 ASR 设置（从共享卷读取）"""
+    """加载 ASR 设置（优先从 config 目录读取，其次从 data 目录）"""
     import json
+    # 优先从已挂载的 config 目录读取（持久化）
+    config_dir = os.getenv("BILIBILI_CONFIG_DIR", "")
+    if not config_dir:
+        config_dir = str(Path(__file__).parent.parent / "bilibili-config")
+    candidates = [
+        Path(config_dir) / ".asr_config" / "settings.json",
+    ]
+    # 其次从 data 目录读取（兼容旧路径）
     data_dir = os.getenv("BILIBILI_DATA_DIR", "")
     if not data_dir:
         data_dir = str(Path(__file__).parent.parent / "data")
+    candidates.append(Path(data_dir) / ".asr_config" / "settings.json")
 
-    settings_file = Path(data_dir) / ".asr_config" / "settings.json"
-
-    if settings_file.exists():
-        try:
-            with open(settings_file, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    for settings_file in candidates:
+        if settings_file.exists():
+            try:
+                with open(settings_file, encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
 
     return {"enabled": False, "monthly_budget_minutes": 60}
 

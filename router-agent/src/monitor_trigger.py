@@ -169,6 +169,7 @@ class MonitorTrigger:
                 volumes = [
                     f"{vol_prefix}bilibili-data:/app/downloads:rw",
                     f"{vol_prefix}bilibili-data:/root/B站监控:rw",  # 实际下载目录（YAML 配置的 download_root）
+                    f"{vol_prefix}bilibili-data:/app/bilibili-data:rw",  # ASR 用量存储（与 router-agent 共享）
                     f"{vol_prefix}duckdb-data:/app/data:rw",
                 ]
 
@@ -313,6 +314,7 @@ class MonitorTrigger:
         env["CHROMA_HOST"] = "chromadb"
         env["CHROMA_PORT"] = "8000"
         env["BILIBILI_CONFIG_DIR"] = "/app/bilibili-config"
+        env["BILIBILI_DATA_DIR"] = "/app/bilibili-data"
 
         return env
 

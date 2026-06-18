@@ -256,23 +256,28 @@ async def get_up_list():
         finally:
             conn.close()
 
-        # 合并 YAML 配置文件中的 UP主（新增的、还没有视频的）
+        # 合并 YAML 配置文件中的 UP主，同时收集有效 UID 集合
+        yaml_uids = set()
         for up in up_manager.list_ups():
             uid = str(up.get("uid", ""))
-            if uid and uid not in db_ups:
-                db_ups[uid] = {
-                    "uid": uid, "name": up.get("name", ""),
-                    "total_videos": 0, "last_update": None,
-                    "domain": up.get("domain", "emotional"),
-                }
-            else:
-                # 补充 domain 信息
-                if uid in db_ups:
+            if uid:
+                yaml_uids.add(uid)
+                if uid not in db_ups:
+                    db_ups[uid] = {
+                        "uid": uid, "name": up.get("name", ""),
+                        "total_videos": 0, "last_update": None,
+                        "domain": up.get("domain", "emotional"),
+                    }
+                else:
+                    # 补充 domain 信息
                     db_ups[uid]["domain"] = up.get("domain", "emotional")
+
+        # 过滤：只保留有 YAML 配置的 UP主（删除的不再出现在下拉框）
+        filtered = [v for uid, v in db_ups.items() if uid in yaml_uids]
 
         return {
             "success": True,
-            "data": sorted(db_ups.values(), key=lambda x: x["total_videos"], reverse=True),
+            "data": sorted(filtered, key=lambda x: x["total_videos"], reverse=True),
         }
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
