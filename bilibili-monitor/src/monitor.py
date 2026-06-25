@@ -552,6 +552,7 @@ def main():
                         'publish_date': pub_date,
                         'category': v.get('tname', ''),
                         'duration': v.get('duration', 0),
+                        'play_count': v.get('play', 0),
                         'summary': None,
                         'tags': v.get('tags', ''),
                         'domain': domain,
@@ -657,6 +658,7 @@ def main():
                     'publish_date': pub_date,
                     'category': v.get('tname', ''),
                     'duration': v.get('duration', 0),
+                    'play_count': v.get('play', 0),
                 }
 
             if actual_transcripts_dir and Path(actual_transcripts_dir).exists() and list(Path(actual_transcripts_dir).glob("*.txt")):

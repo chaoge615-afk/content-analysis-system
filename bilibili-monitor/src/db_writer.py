@@ -34,6 +34,7 @@ class DBWriter:
                 publish_date DATE,
                 category TEXT,
                 duration INT,
+                play_count INT DEFAULT 0,
                 summary TEXT,
                 tags TEXT,
                 domain TEXT DEFAULT '',
@@ -55,11 +56,14 @@ class DBWriter:
         self.conn.commit()
 
     def _migrate(self):
-        """自动补列：给已有数据库添加 domain 列"""
+        """自动补列：给已有数据库添加新列"""
         cols = self.conn.execute("PRAGMA table_info('video_meta')").fetchall()
         col_names = [c[1] for c in cols]
         if 'domain' not in col_names:
             self.conn.execute("ALTER TABLE video_meta ADD COLUMN domain TEXT DEFAULT ''")
+            self.conn.commit()
+        if 'play_count' not in col_names:
+            self.conn.execute("ALTER TABLE video_meta ADD COLUMN play_count INT DEFAULT 0")
             self.conn.commit()
 
     def insert_video(self, video: Dict) -> bool:
@@ -69,8 +73,8 @@ class DBWriter:
         """
         try:
             self.conn.execute("""
-                INSERT INTO video_meta (bvid, up_name, up_uid, title, publish_date, category, duration, summary, tags, domain)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO video_meta (bvid, up_name, up_uid, title, publish_date, category, duration, play_count, summary, tags, domain)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (bvid) DO UPDATE SET
                     up_name = EXCLUDED.up_name,
                     up_uid = EXCLUDED.up_uid,
@@ -78,6 +82,7 @@ class DBWriter:
                     publish_date = EXCLUDED.publish_date,
                     category = EXCLUDED.category,
                     duration = EXCLUDED.duration,
+                    play_count = EXCLUDED.play_count,
                     summary = EXCLUDED.summary,
                     tags = EXCLUDED.tags,
                     domain = EXCLUDED.domain
@@ -89,6 +94,7 @@ class DBWriter:
                 video.get('publish_date'),
                 video.get('category'),
                 video.get('duration'),
+                video.get('play_count', 0),
                 video.get('summary'),
                 video.get('tags'),
                 video.get('domain', ''),

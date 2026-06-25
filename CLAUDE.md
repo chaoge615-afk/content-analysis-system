@@ -3,7 +3,7 @@
 ## 项目概述
 B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckDB) + 向量化入库(ChromaDB) → 统一入口智能问答
 
-## 当前状态（2026-06-01）
+## 当前状态（2026-06-25）
 - Phase 1-11 全部完成 ✅
 - **内容域分离**：情感(`emotional`) + 求职(`career`) 双轨精炼 + 检索隔离（`refiner_domains.py`）
 - **unknown 归属修复**：yt-dlp + Cookie，1158 → 9（99.2%）
@@ -11,6 +11,8 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 - **UP主导入导出**：ZIP 打包完整数据（配置+元数据+向量+转写），跨环境一键迁移
 - **GPU 转录集成**：采集流程自动委托 gpu-service（GPU > 云ASR > CPU 三级回退）
 - 详细进度见 `docs/开发计划.md`
+- [x] K-06: 清理可疑 hacked 表
+- [x] K-11: text-to-sql 查询质量优化（UP主LIKE模糊匹配 + play_count字段 + 时间WHERE过滤）
 
 ## 技术栈
 - Python 3.11 / Node.js 24
@@ -51,6 +53,8 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 - text-to-sql 声称用CrewAI但实际是纯Python手写pipeline
 - 意图分类器 category 只能用有效分类名，话题词放 keywords
 - Docker Desktop 路径: /c/Users/25022/AppData/Local/Programs/DockerDesktop/resources/bin
+- **video_meta 表含 `play_count` 字段**：播放量，text-to-sql 查询播放量相关指标时直接使用此字段
+- **text-to-sql Prompt 优化（K-11）**：UP主名称查询使用 `LIKE` 模糊匹配（避免精确匹配失败）；时间范围表达映射为 SQL `WHERE` 条件（如"最近"→ 时间过滤）；播放量字段使用 `play_count`
 
 ## 新会话启动流程
 1. `git pull --rebase`

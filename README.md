@@ -122,13 +122,13 @@ docker compose run --rm bilibili-monitor python src/migrate_refined.py
 ## 子项目说明
 
 ### bilibili-monitor/
-B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU > 云ASR > CPU 三级回退）→ DeepSeek 精炼 → 写入 DuckDB + ChromaDB。支持 UP主 导入导出（ZIP 打包跨环境迁移）。
+B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU > 云ASR > CPU 三级回退）→ DeepSeek 精炼 → 写入 DuckDB + ChromaDB。采集时从 Bilibili API 获取播放量（play_count）并写入 video_meta。支持 UP主 导入导出（ZIP 打包跨环境迁移）。已清理 DuckDB 中被篡改的可疑表（K-06）。
 
 ### personal-knowledge-rag/
 视频知识库 RAG 问答：BM25 + 向量混合检索，支持 MiniMax / DeepSeek 双 LLM，31 个情感分类 metadata 过滤
 
 ### text-to-sql/
-自然语言转 SQL 查询：4-Agent pipeline（schema → intent → SQL 生成 → 执行），前端 React 对话界面
+自然语言转 SQL 查询：4-Agent pipeline（schema → intent → SQL 生成 → 执行），前端 React 对话界面。支持 UP主 名称模糊匹配（LIKE）、play_count 播放量字段查询、时间范围 WHERE 条件生成
 
 ### router-agent/
 统一入口：意图分类（structured / semantic / hybrid）→ 分发到 Text-to-SQL 或 RAG → hybrid 模式 LLM 融合结果。支持 UP主 名称标准化（简称→全名，如"桃姐"→"恋爱教头桃姐"），智能降级（SQL 空结果自动回退到 RAG 内容）

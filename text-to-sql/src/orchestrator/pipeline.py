@@ -59,7 +59,7 @@ class TextToSQLPipeline:
                 "name": "video_meta",
                 "description": "视频元数据表",
                 "columns": ["bvid", "up_name", "up_uid", "title", "publish_date",
-                           "category", "duration", "summary", "tags", "created_at"]
+                           "category", "duration", "play_count", "summary", "tags", "created_at"]
             },
             {
                 "name": "up_info",
