@@ -25,7 +25,7 @@ mcp = FastMCP(
 async def semantic_search(
     question: str,
     filters: dict | None = None,
-    top_k: int = 5,
+    top_k: int = None,
 ) -> str:
     """语义检索视频知识库，获取博主观点、经验分享等非结构化内容。
 
@@ -34,12 +34,16 @@ async def semantic_search(
     Args:
         question: 自然语言问题，如"博主们对冷暴力怎么看"、"如何维持长期关系"
         filters: 可选过滤条件，如 {"up_name": "桃姐", "category": "恋爱技巧"}
-        top_k: 返回结果数量，默认5
+        top_k: 返回结果数量；None 表示用 RAG 引擎 env TOP_K 默认（不覆盖），
+               传入正整数则覆盖该次请求。默认 None 而非 5，避免走 MCP 路径时
+               把 env TOP_K 静默覆盖回 5（CS-25 对抗审查修正）。
     """
+    # top_k=None 时序列化为 null，api 层 Optional[int] 接收 None → engine 回退 env 默认
     payload = {
         "question": question,
         "filters": filters or {},
         "use_hybrid": True,
+        "top_k": top_k,
     }
 
     try:

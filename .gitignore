@@ -38,6 +38,8 @@ docker-data/
 *.zip
 *.7z
 *.sql
+# 例外：数据库 schema 源码需纳入版本控制（text-to-sql 建表 DDL）
+!text-to-sql/src/database/schema.sql
 .search_index.json
 search_index.json
 

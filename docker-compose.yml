@@ -125,7 +125,7 @@ services:
       - RAG_SERVICE_URL=http://rag:8090
       - DUCKDB_PATH=/app/data/content.db
       - DATA_DIR=/app/data  # QueryLogger 独立数据库路径
-      - REQUEST_TIMEOUT=120  # LLM 调用超时（首次请求可能较慢）
+      - REQUEST_TIMEOUT=360  # LLM 调用超时（首问/重试 157-342s，60s/120s 必超时）
       - BILIBILI_CONFIG_DIR=/app/bilibili-config  # UP主配置目录
       - BILIBILI_DATA_DIR=/app/bilibili-data  # ASR 设置/用量存储
       # 透传 bilibili-monitor 所需环境变量（用于触发采集）
@@ -178,6 +178,7 @@ services:
     environment:
       - SQL_SERVICE_URL=http://text-to-sql:8010
       - RAG_SERVICE_URL=http://rag:8090
+      - SQL_TIMEOUT=360  # 底层 text-to-sql pipeline 实测 157-342s，MCP 60s 默认必超时
     depends_on:
       text-to-sql:
         condition: service_healthy

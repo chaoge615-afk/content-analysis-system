@@ -11,9 +11,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.orchestrator.pipeline import TextToSQLPipeline
-from src.database.duckdb_utils import get_all_schemas
+from src.database.duckdb_utils import get_all_schemas, init_database
 
-app = FastAPI(title="Text-to-SQL API", version="1.0.0")
+# 用 lifespan 替代已废弃的 @app.on_event("startup")（对抗审查修正建议 #4）
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # CS-09：容器启动即自举 schema/迁移，不再依赖 bilibili-monitor 是否跑过。
+    # best-effort：失败不阻断 API 启动（init_database 内部已 try/except）。
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        init_database()
+    except Exception as e:
+        print(f"[api_server] init_database 警告: {e}")
+    yield
+
+
+app = FastAPI(title="Text-to-SQL API", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(

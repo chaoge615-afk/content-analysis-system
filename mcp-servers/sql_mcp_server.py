@@ -11,7 +11,10 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 SQL_SERVICE_URL = os.getenv("SQL_SERVICE_URL", "http://localhost:8010")
-REQUEST_TIMEOUT = float(os.getenv("SQL_TIMEOUT", "60"))
+# CS-45：底层 text-to-sql pipeline 单次 run 实测 157-342s（首问/重试场景），
+# 60s 默认必超时（httpx.ReadTimeout 先于底层完成抛出）。默认抬到 300s，
+# docker-compose 生产环境注入 SQL_TIMEOUT=360 留余量。
+REQUEST_TIMEOUT = float(os.getenv("SQL_TIMEOUT", "300"))
 
 mcp = FastMCP(
     "SQL MCP Server",
@@ -47,7 +50,10 @@ async def text_to_sql(question: str, filters: dict | None = None) -> str:
         payload["pre_intent"] = {"filters": filters}
 
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        # CS-45：用结构化 Timeout，连接快失败、读慢可等，避免连接阶段也吃满超时
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=REQUEST_TIMEOUT, write=10.0, pool=10.0)
+        ) as client:
             resp = await client.post(
                 f"{SQL_SERVICE_URL}/query",
                 json=payload,

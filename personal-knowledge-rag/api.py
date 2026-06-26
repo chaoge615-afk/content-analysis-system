@@ -49,6 +49,9 @@ class AskVideoRequest(BaseModel):
     question: str
     filters: Optional[dict] = None  # { up_name, category, bvid }
     use_hybrid: bool = True  # 是否使用 BM25+向量混合检索
+    # CS-25：top_k=None 表示用引擎 env TOP_K 默认；传入正整数则覆盖该次请求。
+    # Pydantic 才会接收（之前缺字段会被静默丢弃）。
+    top_k: Optional[int] = None
 
 
 class AskGenericRequest(BaseModel):
@@ -103,6 +106,7 @@ async def ask_video(req: AskVideoRequest):
             req.question,
             metadata_filter=req.filters,
             use_hybrid=req.use_hybrid,
+            top_k=req.top_k,
             return_sources=True,
         )
         return {

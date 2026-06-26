@@ -274,6 +274,7 @@ class KnowledgeRAG:
         question: str,
         metadata_filter: dict = None,
         use_hybrid: bool = True,
+        top_k: int = None,
         return_sources: bool = False,
     ):
         """
@@ -283,7 +284,16 @@ class KnowledgeRAG:
             question: 用户问题
             metadata_filter: 过滤条件，如 {"up_name": "桃姐", "category": "01_喜欢"}
             use_hybrid: 是否使用 BM25+向量混合检索
+            top_k: 请求级 top_k 覆盖。None/0/负数 → 用 env TOP_K 默认；
+                   正整数 → 覆盖（上限 20 防上下文爆炸）。env 默认不受 20 约束
+                   （CS-25 对抗审查修正：不钳制 env 配置）。
         """
+        # CS-25：请求级覆盖才钳上限 20，env 默认 self.top_k 原样使用
+        if top_k and top_k > 0:
+            effective_top_k = min(top_k, 20)
+        else:
+            effective_top_k = self.top_k
+
         if self.video_vector_db._collection.count() == 0:
             empty_msg = "视频知识库还是空的，请先加载视频精炼内容"
             return (empty_msg, []) if return_sources else empty_msg
@@ -300,10 +310,10 @@ class KnowledgeRAG:
         where_filter = self._build_where_filter(metadata_filter)
 
         if use_hybrid:
-            docs = self._hybrid_search_video(query_text, where_filter)
+            docs = self._hybrid_search_video(query_text, where_filter, top_k=effective_top_k)
         else:
             # 纯向量检索
-            search_kwargs = {"k": self.top_k}
+            search_kwargs = {"k": effective_top_k}
             if where_filter:
                 search_kwargs["filter"] = where_filter
             retriever = self.video_vector_db.as_retriever(
@@ -412,9 +422,15 @@ class KnowledgeRAG:
         return self.ask_video(question, metadata_filter=metadata_filter)
 
     def _hybrid_search_video(
-        self, question: str, where_filter: dict = None
+        self, question: str, where_filter: dict = None, top_k: int = None
     ) -> List[Document]:
-        """BM25 + 向量混合检索视频知识库"""
+        """BM25 + 向量混合检索视频知识库
+
+        CS-25：top_k 形参贯通。ask_video 传入 effective_top_k；
+        None 兜底 self.top_k（env 默认），保证向后兼容。
+        """
+        effective_top_k = top_k if (top_k and top_k > 0) else self.top_k
+
         # 懒加载 BM25 索引
         if self._video_bm25 is None:
             print("[混合检索] 构建 BM25 索引...", flush=True)
@@ -456,7 +472,7 @@ class KnowledgeRAG:
             query=question,
             bm25=self._video_bm25,
             vector_search_fn=vector_search_fn,
-            top_k=self.top_k,
+            top_k=effective_top_k,
         )
 
         # 将结果转换为 Document 列表
