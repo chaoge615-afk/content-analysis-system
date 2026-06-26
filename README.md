@@ -122,13 +122,13 @@ docker compose run --rm bilibili-monitor python src/migrate_refined.py
 ## 子项目说明
 
 ### bilibili-monitor/
-B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU > 云ASR > CPU 三级回退）→ DeepSeek 精炼 → 写入 DuckDB + ChromaDB。采集时从 Bilibili API 获取播放量（play_count）并写入 video_meta。支持 UP主 导入导出（ZIP 打包跨环境迁移）。已清理 DuckDB 中被篡改的可疑表（K-06）。
+B站视频自动采集：拉取视频列表 → yt-dlp 下载 → 转写（GPU > 云ASR > CPU 三级回退）→ DeepSeek 精炼 → 写入 DuckDB + ChromaDB。采集时从 Bilibili API 获取播放量（play_count）并写入 video_meta（含 domain 内容域列）。支持 UP主 导入导出（ZIP 打包跨环境迁移）。已清理 DuckDB 中被篡改的可疑表（K-06）。
 
 ### personal-knowledge-rag/
-视频知识库 RAG 问答：BM25 + 向量混合检索，支持 MiniMax / DeepSeek 双 LLM，31 个情感分类 metadata 过滤
+视频知识库 RAG 问答：BM25 + 向量混合检索，支持 MiniMax / DeepSeek 双 LLM，31 个情感分类 metadata 过滤。top_k 支持请求级覆盖（MCP/HTTP 传参，不传用 env TOP_K 默认，上限 20 仅钳请求级）
 
 ### text-to-sql/
-自然语言转 SQL 查询：4-Agent pipeline（schema → intent → SQL 生成 → 执行），前端 React 对话界面。支持 UP主 名称模糊匹配（LIKE）、play_count 播放量字段查询、时间范围 WHERE 条件生成
+自然语言转 SQL 查询：4-Agent pipeline（schema → intent → SQL 生成 → 执行），前端 React 对话界面。支持 UP主 名称模糊匹配（LIKE）、play_count 播放量字段查询、时间范围 WHERE 条件生成。**容器启动自举建表**（lifespan 调 init_database，建 video_meta/up_info/query_log + 列迁移，不再依赖 bilibili-monitor 实跑）；**execute_sql 只读白名单**（仅 SELECT/WITH，DDL/DML 硬拦）
 
 ### router-agent/
 统一入口：意图分类（structured / semantic / hybrid）→ 分发到 Text-to-SQL 或 RAG → hybrid 模式 LLM 融合结果。支持 UP主 名称标准化（简称→全名，如"桃姐"→"恋爱教头桃姐"），智能降级（SQL 空结果自动回退到 RAG 内容）
@@ -186,3 +186,14 @@ docker compose --profile dev up -d
 - 所有 API 密钥走环境变量，不硬编码
 - Docker 构建使用国内镜像加速（apt: 阿里云, pip: 清华 TUNA, npm: 淘宝）
 - 每次镜像重建后执行 `docker builder prune -a -f` 清理缓存
+
+## 修复记录（2026-06-26 第二轮·遗留问题）
+
+> 基于 6 组诊断 + 6 组对抗审查（共 12 Agent）的修复方案，方案详见 [../遗留问题修复方案.md](../遗留问题修复方案.md)，全部经回归验证通过。
+
+| 编号 | 子项目 | 修复内容 | 回归验证 |
+|------|--------|----------|----------|
+| CS-45 | mcp-servers / router-agent | SQL 超时过短：`sql_mcp_server.py` 默认 `SQL_TIMEOUT` 60→300 + 结构化 Timeout；`docker-compose.yml` mcp-servers `SQL_TIMEOUT=360`、router-agent `REQUEST_TIMEOUT` 120→360 | env 注入均=360 |
+| CS-09 | text-to-sql | DuckDB 缺 video_meta：新建 `src/database/schema.sql`（含 domain 列）；`init_database` 兜底 DDL + 列迁移；`api_server.py` lifespan 自举建表 | 启动日志「迁移：video_meta 补 domain 列」，列含 domain，/api/tables 含 video_meta |
+| CS-07 | text-to-sql | execute_sql 无白名单：`_assert_readonly_sql` 仅 SELECT/WITH 首关键字 + 注释剥离 + 多语句拒绝（不加全文黑名单，避免误伤 `LIKE '%DROP%'`） | 9/9 单测通过（DROP/DELETE/UPDATE/CREATE/注释绕过/多语句均拦，含 LIKE '%DROP%' 的 SELECT 放行） |
+| CS-25 | rag / mcp-servers | top_k 三层未贯通：MCP 签名默认 None（非5）→ api Optional[int] → engine effective_top_k（上限仅钳请求级） | top_k=2 sources=2 / top_k=15 sources=4，随 top_k 单调变化（原恒为3） |

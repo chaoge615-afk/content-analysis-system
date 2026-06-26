@@ -13,6 +13,15 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 - 详细进度见 `docs/开发计划.md`
 - [x] K-06: 清理可疑 hacked 表
 - [x] K-11: text-to-sql 查询质量优化（UP主LIKE模糊匹配 + play_count字段 + 时间WHERE过滤）
+- [x] CS-45/CS-09/CS-07/CS-25: 遗留问题修复第二轮（2026-06-26，详见下方表）
+
+## 已知修复（2026-06-26 遗留问题修复第二轮）
+| 编号 | 修复内容 |
+|------|---------|
+| CS-45 | SQL 超时过短：`mcp-servers/sql_mcp_server.py` 默认 `SQL_TIMEOUT` 60→300 + 结构化 Timeout(connect短/read长)；`docker-compose.yml` mcp-servers 注入 `SQL_TIMEOUT=360`、router-agent `REQUEST_TIMEOUT` 120→360（底层 pipeline 实测 157-342s，60/120s 必超时）。**改超时务必同步 router-agent 主路径，否则 MCP 不超时但 router 先断** |
+| CS-09 | DuckDB 缺 video_meta 表：新建 `text-to-sql/src/database/schema.sql`（含 domain 列，与 db_writer 对齐）；`duckdb_utils.init_database` 兜底内联 DDL + 列迁移（补 domain/play_count）；`api_server.py` lifespan 自举建表（弃用 `@on_event("startup")`），容器启动即建表/迁移，不再依赖 bilibili-monitor 实跑。**`.gitignore` 已加例外 `!text-to-sql/src/database/schema.sql`，源码 SQL 必须入库** |
+| CS-07 | execute_sql 无白名单：`duckdb_utils._assert_readonly_sql` 仅允许 SELECT/WITH 首关键字 + 注释剥离 + 多语句拒绝。**不要加全文关键字黑名单**（会误伤 `WHERE title LIKE '%DROP%'`），首关键字白名单已足够防 DDL/DML。建表/get_table_info/get_all_schemas 走 `conn.execute` 直连已豁免 |
+| CS-25 | RAG top_k 三层未贯通：`rag_mcp_server.semantic_search` 签名默认 `top_k=None`（非5，避免走 MCP 路径覆盖 env TOP_K）；`api.py` `AskVideoRequest` 加 `Optional[int] top_k`；`rag_engine.ask_video` + `_hybrid_search_video` 透传 `effective_top_k`，上限 `min(top_k,20)` **仅钳请求级，不钳 env 默认** |
 
 ## 技术栈
 - Python 3.11 / Node.js 24
@@ -53,7 +62,10 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 - text-to-sql 声称用CrewAI但实际是纯Python手写pipeline
 - 意图分类器 category 只能用有效分类名，话题词放 keywords
 - Docker Desktop 路径: /c/Users/25022/AppData/Local/Programs/DockerDesktop/resources/bin
-- **video_meta 表含 `play_count` 字段**：播放量，text-to-sql 查询播放量相关指标时直接使用此字段
+- **video_meta 表含 `play_count` + `domain` 列**：play_count 播放量；domain 内容域（emotional/career）。列漂移由 `duckdb_utils.init_database` 启动时自动迁移补列
+- **text-to-sql 启动自举建表**：`api_server.py` lifespan 调 `init_database()`，容器启动即建 video_meta/up_info/query_log + 迁移列，不再依赖 bilibili-monitor 实跑。schema 源在 `src/database/schema.sql`
+- **execute_sql 只读白名单**：仅允许 SELECT/WITH，DROP/DELETE/UPDATE 等被 `_assert_readonly_sql` 硬拦。写操作不能复用 execute_sql
+- **RAG top_k 请求级覆盖**：MCP/HTTP 传 top_k 覆盖该次检索；不传用 env `TOP_K` 默认。上限 20 仅钳请求级
 - **text-to-sql Prompt 优化（K-11）**：UP主名称查询使用 `LIKE` 模糊匹配（避免精确匹配失败）；时间范围表达映射为 SQL `WHERE` 条件（如"最近"→ 时间过滤）；播放量字段使用 `play_count`
 
 ## 新会话启动流程
