@@ -50,7 +50,10 @@ B站 UP主 视频 → 自动下载转写 → LLM精炼 → 结构化入库(DuckD
 - Git提交/代码注释用中文
 - NAS内存8GB，各服务需设mem_limit
 - Docker 构建用国内镜像：apt(阿里云) pip(清华TUNA) npm(淘宝)
-- 镜像重建后清缓存：`docker builder prune -a -f`
+- **镜像重建后清缓存（已自动化，勿手敲）**：清理分两条，均由脚本/计划任务代劳，无需手动 `docker builder prune`：
+  - 走 `./scripts/deploy.sh dev|nas` 的重建：脚本收尾段（`scripts/deploy.sh` 末尾「自动清理」段）自动执行——`docker image prune -f`（仅清无标签悬空旧镜像，即重建后被 `latest` 顶替下来的旧版）+ `docker builder prune -a -f`（构建缓存随时可重建，可全清）。
+  - 自己手敲 `docker compose ... up -d --build` 的重建：deploy.sh 不会跑，靠两层兜底——① 系统计划任务 `DockerAutoCleanup` 每周日 03:00 自动触发工作目录根的 `docker-cleanup.bat`；② 想立刻清就双击 `docker-cleanup.bat`。
+  - **镜像清理只用 `docker image prune -f`，禁用 `docker image prune -a`**：`-a` 会删掉所有无运行容器的镜像，误伤 `bilibili-monitor`(Exited)、`gpu-service`(Created) 这类按需服务镜像；悬空旧版用 `-f` 即可安全清掉。卷清理仍属危险操作（`docker volume prune` 慎用），不在自动方案内。
 - 每完成任务点，更新 `docs/开发计划.md` 的 checkbox
 
 ## 关键文件

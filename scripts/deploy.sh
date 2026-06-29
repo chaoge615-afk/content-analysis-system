@@ -103,4 +103,17 @@ echo "  docker compose --profile $PROFILES run --rm bilibili-monitor"
 echo ""
 echo "查看日志："
 echo "  docker compose --profile $PROFILES logs -f"
+echo ""
+
+# ==============================
+# 自动清理废弃镜像 + 构建缓存
+# ==============================
+# 仅清悬空镜像（已无标签的旧版本镜像，重建后被 latest 顶替下来的）。
+# 绝不用 `image prune -a`：那会连 bilibili-monitor(Exited)/gpu-service(Created)
+# 这类按需但无运行容器的镜像一起删掉。
+echo "清理废弃镜像和构建缓存..."
+docker image prune -f || echo "[WARN] 镜像清理失败（不影响已部署服务）"
+# 构建缓存随时可重新生成，可全清（配合上方 image prune -f 清悬空旧版）。
+# 用 || true 兜底，避免 set -e 下清理失败导致整个部署脚本非零退出。
+docker builder prune -a -f || echo "[WARN] 构建缓存清理失败（不影响已部署服务）"
 echo "========================================"

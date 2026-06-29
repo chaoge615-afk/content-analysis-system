@@ -185,7 +185,7 @@ docker compose --profile dev up -d
 - 环境差异走 `.env` + Docker profiles，不改代码
 - 所有 API 密钥走环境变量，不硬编码
 - Docker 构建使用国内镜像加速（apt: 阿里云, pip: 清华 TUNA, npm: 淘宝）
-- 每次镜像重建后执行 `docker builder prune -a -f` 清理缓存
+- 每次镜像重建后执行 `docker builder prune -a -f` 清理缓存（**已自动化**：走 `./scripts/deploy.sh` 的重建由脚本收尾自动执行 `docker image prune -f` + `docker builder prune -a -f`；手敲 `up -d --build` 由计划任务 `DockerAutoCleanup` 每周日 03:00 兜底，也可随时双击工作目录根 `docker-cleanup.bat`；镜像清理只用 `image prune -f` 清悬空旧版，禁用 `-a` 以免误删 bilibili-monitor/gpu-service 等按需服务镜像）
 
 ## 修复记录（2026-06-26 第二轮·遗留问题）
 
